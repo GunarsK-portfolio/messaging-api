@@ -2,77 +2,46 @@ package repository
 
 import (
 	"context"
-	"fmt"
-	"log/slog"
-	"time"
 
-	"gorm.io/driver/postgres"
+	"github.com/GunarsK-portfolio/portfolio-common/models"
+	commonrepo "github.com/GunarsK-portfolio/portfolio-common/repository"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
-
-	"github.com/GunarsK-templates/template-api/internal/config"
-	"github.com/GunarsK-templates/template-api/internal/models"
 )
 
-// Repository defines the interface for data access
+// Repository defines the interface for messaging data operations
 type Repository interface {
-	// Item operations
-	GetAllItems(ctx context.Context) ([]models.Item, error)
-	GetItemByID(ctx context.Context, id int64) (*models.Item, error)
-	CreateItem(ctx context.Context, item *models.Item) error
-	UpdateItem(ctx context.Context, item *models.Item) error
-	DeleteItem(ctx context.Context, id int64) error
+	// Contact Messages (public: create only, admin: list/get)
+	CreateContactMessage(ctx context.Context, message *models.ContactMessage) error
+	GetContactMessages(ctx context.Context) ([]models.ContactMessage, error)
+	GetContactMessageByID(ctx context.Context, id int64) (*models.ContactMessage, error)
+	UpdateContactMessageStatus(ctx context.Context, id int64, status string, lastError *string) error
+
+	// Recipients (admin only)
+	GetAllRecipients(ctx context.Context) ([]models.Recipient, error)
+	GetActiveRecipients(ctx context.Context) ([]models.Recipient, error)
+	GetRecipientByID(ctx context.Context, id int64) (*models.Recipient, error)
+	CreateRecipient(ctx context.Context, recipient *models.Recipient) error
+	UpdateRecipient(ctx context.Context, recipient *models.Recipient) error
+	DeleteRecipient(ctx context.Context, id int64) error
 }
 
 type repository struct {
 	db *gorm.DB
+	*commonrepo.SafeUpdater
 }
 
 // New creates a new repository instance
 func New(db *gorm.DB) Repository {
-	return &repository{db: db}
+	return &repository{
+		db:          db,
+		SafeUpdater: commonrepo.NewSafeUpdater(db),
+	}
 }
 
-// ConnectDB establishes a database connection
-func ConnectDB(cfg *config.Config) (*gorm.DB, error) {
-	// Configure GORM logger
-	gormLogLevel := logger.Silent
-	if cfg.Service.Environment == "development" {
-		gormLogLevel = logger.Info
-	}
+// checkRowsAffected wraps the common helper
+var checkRowsAffected = commonrepo.CheckRowsAffected
 
-	gormConfig := &gorm.Config{
-		Logger: logger.Default.LogMode(gormLogLevel),
-	}
-
-	db, err := gorm.Open(postgres.Open(cfg.Database.DSN()), gormConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
-	}
-
-	// Configure connection pool
-	sqlDB, err := db.DB()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get underlying sql.DB: %w", err)
-	}
-
-	sqlDB.SetMaxOpenConns(25)
-	sqlDB.SetMaxIdleConns(10)
-	sqlDB.SetConnMaxLifetime(time.Hour)
-	sqlDB.SetConnMaxIdleTime(10 * time.Minute)
-
-	slog.Info("Database connection established")
-
-	return db, nil
-}
-
-// checkRowsAffected verifies that at least one row was affected
-func checkRowsAffected(result *gorm.DB) error {
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return gorm.ErrRecordNotFound
-	}
-	return nil
+// safeUpdate wraps SafeUpdater.Update for backward compatibility
+func (r *repository) safeUpdate(ctx context.Context, model interface{}, id int64) error {
+	return r.Update(ctx, model, id)
 }

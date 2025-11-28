@@ -63,7 +63,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           file: ./coverage.out
-          fail_ci_if_error: false
+          fail_ci_if_error: false # Don't fail if codecov is unavailable
         continue-on-error: true
 
       - name: Upload coverage artifact
@@ -99,7 +99,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
+      security-events: write # For GitHub Security tab
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -107,32 +107,28 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Set image name (lowercase)
-        id: image
-        run: echo "name=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
-
       - name: Build Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
           push: false
           load: true
-          tags: ${{ steps.image.outputs.name }}:${{ github.sha }}
+          tags: messaging-api:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@0.33.1
         with:
-          image-ref: ${{ steps.image.outputs.name }}:${{ github.sha }}
+          image-ref: messaging-api:${{ github.sha }}
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
-          exit-code: '1'
+          exit-code: '1' # Fail on CRITICAL/HIGH vulnerabilities
 
       - name: Upload Trivy results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v4
-        if: always()
+        if: always() # Upload even if scan fails
         with:
           sarif_file: 'trivy-results.sarif'
 
@@ -140,7 +136,7 @@ jobs:
         uses: aquasecurity/trivy-action@0.33.1
         if: always()
         with:
-          image-ref: ${{ steps.image.outputs.name }}:${{ github.sha }}
+          image-ref: messaging-api:${{ github.sha }}
           format: 'table'
           severity: 'CRITICAL,HIGH,MEDIUM'
 
@@ -150,7 +146,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
+      security-events: write # For GitHub Security tab
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -180,7 +176,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # Full history for scanning
 
       - name: Run TruffleHog
         uses: trufflesecurity/trufflehog@main

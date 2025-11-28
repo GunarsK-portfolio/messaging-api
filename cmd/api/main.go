@@ -1,143 +1,78 @@
 package main
 
 import (
-	"context"
-	"fmt"
-	"log/slog"
-	"net/http"
+	"log"
 	"os"
-	"os/signal"
-	"syscall"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/GunarsK-templates/template-api/internal/config"
-	"github.com/GunarsK-templates/template-api/internal/handlers"
-	"github.com/GunarsK-templates/template-api/internal/repository"
-	"github.com/GunarsK-templates/template-api/internal/routes"
+	_ "github.com/GunarsK-portfolio/messaging-api/docs"
+	"github.com/GunarsK-portfolio/messaging-api/internal/config"
+	"github.com/GunarsK-portfolio/messaging-api/internal/handlers"
+	"github.com/GunarsK-portfolio/messaging-api/internal/repository"
+	"github.com/GunarsK-portfolio/messaging-api/internal/routes"
+	commondb "github.com/GunarsK-portfolio/portfolio-common/database"
+	"github.com/GunarsK-portfolio/portfolio-common/logger"
+	"github.com/GunarsK-portfolio/portfolio-common/metrics"
+	"github.com/GunarsK-portfolio/portfolio-common/server"
 )
 
-// @title           Your Service API
+// @title           Messaging API
 // @version         1.0
-// @description     API for your service
-// @termsOfService  http://swagger.io/terms/
-
-// @contact.name   API Support
-// @contact.email  support@example.com
-
-// @license.name  MIT
-// @license.url   https://opensource.org/licenses/MIT
-
-// @host      localhost:8080
-// @BasePath  /api/v1
-
+// @description     API for contact form submissions and recipient management
+// @host            localhost:8086
+// @BasePath        /api/v1
 // @securityDefinitions.apikey BearerAuth
 // @in header
 // @name Authorization
-// @description Type "Bearer" followed by a space and JWT token.
-
 func main() {
-	// Load configuration
 	cfg := config.Load()
 
-	// Setup logger
-	logLevel := slog.LevelInfo
-	if cfg.Service.Environment == "development" {
-		logLevel = slog.LevelDebug
-	}
+	appLogger := logger.New(logger.Config{
+		Level:       os.Getenv("LOG_LEVEL"),
+		Format:      os.Getenv("LOG_FORMAT"),
+		ServiceName: "messaging-api",
+		AddSource:   os.Getenv("LOG_SOURCE") == "true",
+	})
 
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level:     logLevel,
-		AddSource: cfg.Service.Environment == "development",
-	}))
-	slog.SetDefault(logger)
+	appLogger.Info("Starting messaging API", "version", "1.0")
 
-	slog.Info("Starting service",
-		"service", cfg.Service.Name,
-		"environment", cfg.Service.Environment,
-		"port", cfg.Service.Port,
-	)
+	metricsCollector := metrics.New(metrics.Config{
+		ServiceName: "messaging",
+		Namespace:   "portfolio",
+	})
 
-	// Connect to database
-	db, err := repository.ConnectDB(cfg)
+	//nolint:staticcheck // Embedded field name required due to ambiguous fields
+	db, err := commondb.Connect(commondb.PostgresConfig{
+		Host:     cfg.DatabaseConfig.Host,
+		Port:     cfg.DatabaseConfig.Port,
+		User:     cfg.DatabaseConfig.User,
+		Password: cfg.DatabaseConfig.Password,
+		DBName:   cfg.DatabaseConfig.Name,
+		SSLMode:  cfg.DatabaseConfig.SSLMode,
+		TimeZone: "UTC",
+	})
 	if err != nil {
-		slog.Error("Failed to connect to database", "error", err)
-		os.Exit(1)
+		appLogger.Error("Failed to connect to database", "error", err)
+		log.Fatal("Failed to connect to database:", err)
 	}
+	appLogger.Info("Database connection established")
 
-	// Initialize repository
 	repo := repository.New(db)
-
-	// Initialize handlers
 	handler := handlers.New(repo)
 
-	// Setup Gin router
-	if cfg.Service.Environment == "production" {
-		gin.SetMode(gin.ReleaseMode)
-	}
-
 	router := gin.New()
-	router.Use(gin.Recovery())
-	router.Use(requestLogger())
+	router.Use(logger.Recovery(appLogger))
+	router.Use(logger.RequestLogger(appLogger))
+	router.Use(metricsCollector.Middleware())
 
-	// Setup routes
-	routes.Setup(router, handler, cfg)
+	routes.Setup(router, handler, cfg, metricsCollector)
 
-	// Metrics endpoint
-	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	appLogger.Info("Messaging API ready", "port", cfg.ServiceConfig.Port, "environment", os.Getenv("ENVIRONMENT"))
 
-	// Create server
-	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%s", cfg.Service.Port),
-		Handler:      router,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
-	}
-
-	// Start server in goroutine
-	go func() {
-		slog.Info("Server listening", "addr", srv.Addr)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			slog.Error("Server error", "error", err)
-			os.Exit(1)
-		}
-	}()
-
-	// Graceful shutdown
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-
-	slog.Info("Shutting down server...")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	if err := srv.Shutdown(ctx); err != nil {
-		slog.Error("Server forced to shutdown", "error", err)
-		os.Exit(1)
-	}
-
-	slog.Info("Server exited gracefully")
-}
-
-// requestLogger logs HTTP requests
-func requestLogger() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		start := time.Now()
-		path := c.Request.URL.Path
-
-		c.Next()
-
-		slog.Info("Request",
-			"method", c.Request.Method,
-			"path", path,
-			"status", c.Writer.Status(),
-			"duration", time.Since(start).String(),
-			"client_ip", c.ClientIP(),
-		)
+	serverCfg := server.DefaultConfig(cfg.ServiceConfig.Port)
+	if err := server.Run(router, serverCfg, appLogger); err != nil {
+		appLogger.Error("Server error", "error", err)
+		log.Fatal("Server error:", err)
 	}
 }

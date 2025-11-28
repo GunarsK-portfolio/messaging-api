@@ -2,137 +2,120 @@
 
 ## Overview
 
-The template-api uses Go's standard `testing` package for unit tests.
+The messaging-api uses Go's standard `testing` package with httptest for handler
+unit tests. This service handles contact form submissions and recipient management.
 
 ## Quick Commands
 
 ```bash
 # Run all tests
-task test
-
-# Or directly with Go
-go test -v ./...
+go test ./internal/handlers/
 
 # Run with coverage
-go test -cover ./...
+go test -cover ./internal/handlers/
 
 # Generate coverage report
-go test -coverprofile=coverage.out ./...
+go test -coverprofile=coverage.out ./internal/handlers/
 go tool cover -html=coverage.out -o coverage.html
 
 # Run specific test
-go test -v -run TestNewDatabaseConfig ./internal/config/
+go test -v -run TestCreateContactMessage_Success ./internal/handlers/
 
-# Run all config tests
-go test -v ./internal/config/
+# Run all Contact Message tests
+go test -v -run ContactMessage ./internal/handlers/
+
+# Run all Recipient tests
+go test -v -run Recipient ./internal/handlers/
 ```
 
 ## Test Files
 
-**`internal/config/database_test.go`** - 8 tests
+**`handler_test.go`** - 43 tests
 
-- DSN formatting (2)
-- Environment loading (2)
-- Default values (1)
-- Required field validation (4) - panics on missing host/user/password/name
-
-**`internal/config/jwt_test.go`** - 5 tests
-
-- Nil when secret not set (1)
-- Environment loading (1)
-- Default values (1)
-- Short secret validation (1)
-- HasJWT helper (3 sub-tests)
-
-**`internal/config/service_test.go`** - 5 tests
-
-- Environment loading (1)
-- Default values (1)
-- AllowedOrigins parsing (4 sub-tests)
-- Environment validation (3 valid + 1 invalid)
-
-**`internal/utils/env_test.go`** - 10 tests
-
-- GetEnv (3)
-- GetEnvRequired (2)
-- GetEnvSlice (4 sub-tests)
-- GetEnvInt (5 sub-tests)
-- GetEnvBool (6 sub-tests)
-- GetEnvDuration (6 sub-tests)
+| Category | Tests | Coverage |
+|----------|-------|----------|
+| Health Check | 1 | HealthCheck endpoint |
+| Contact Messages | 11 | Create, GetAll, GetByID + error cases |
+| Recipients | 20 | GetAll, GetByID, Create, Update, Delete + errors |
+| Context Propagation | 3 | Verifies context with sentinel value |
+| ID Validation | 2 | Table-driven invalid ID format tests (16 subtests) |
+| Constructor | 1 | Handler initialization |
 
 ## Key Testing Patterns
 
+**Mock Repository**: Function fields allow per-test behavior customization
+
+```go
+mockRepo := &mockRepository{
+    createContactMessageFunc: func(
+        ctx context.Context,
+        msg *models.ContactMessage,
+    ) error {
+        return nil
+    },
+}
+```
+
+**HTTP Testing**: Uses `httptest.ResponseRecorder` with Gin router
+
+```go
+body := `{"name":"John","email":"john@example.com","subject":"Test","message":"Hello"}`
+w := performRequest(router, http.MethodPost, "/api/v1/contact", strings.NewReader(body))
+if w.Code != http.StatusCreated { ... }
+```
+
 **Table-driven tests**: Multiple scenarios with `tests := []struct{...}`
 
-```go
-func TestGetEnvInt_TableDriven(t *testing.T) {
-    tests := []struct {
-        name         string
-        envValue     string
-        setEnv       bool
-        defaultValue int
-        want         int
-    }{
-        {
-            name:         "returns default when not set",
-            setEnv:       false,
-            defaultValue: 42,
-            want:         42,
-        },
-        // ... more cases
-    }
+**Test Helpers**: Factory functions for consistent test data
 
-    for _, tt := range tests {
-        t.Run(tt.name, func(t *testing.T) {
-            // test logic
-        })
-    }
-}
+```go
+msg := createTestContactMessage()
+recipient := createTestRecipient()
 ```
 
-**Environment cleanup**: Use `t.Cleanup()` for automatic teardown
+## Test Categories
+
+### Success Cases
+
+- Returns expected data
+- Sets correct HTTP status
+- Sets Location header on create
+- Spam detection returns success but doesn't save
+
+### Error Cases
+
+- Repository errors (500)
+- Not found errors (404)
+- Invalid ID format (400)
+- Validation errors (400)
+- Invalid email format (400)
+- Invalid JSON (400)
+
+## API Characteristics
+
+Messaging-api handles contact form and recipient operations:
+
+- **Contact Form**: Public endpoint for submissions with honeypot spam detection
+- **Messages**: Admin-only read access (GetAll, GetByID)
+- **Recipients**: Admin-only CRUD for email notification recipients
+
+## Spam Protection
+
+The honeypot test (`TestCreateContactMessage_SpamDetected`) verifies:
+
+- Messages with honeypot field filled return 201 (to not alert bots)
+- But the message is NOT saved to the database
 
 ```go
-func setEnvForTest(t *testing.T, key, value string) {
-    t.Helper()
-    os.Setenv(key, value)
-    t.Cleanup(func() { os.Unsetenv(key) })
-}
-```
-
-**Panic testing**: For validation that should panic
-
-```go
-func TestNewDatabaseConfig_PanicsOnMissingHost(t *testing.T) {
-    defer func() {
-        if r := recover(); r == nil {
-            t.Error("should panic when DB_HOST is missing")
-        }
-    }()
-
-    NewDatabaseConfig()
-}
-```
-
-**Section markers**: Organize tests by function
-
-```go
-// =============================================================================
-// NewDatabaseConfig Tests
-// =============================================================================
-```
-
-## Test Constants
-
-```go
-testJWTSecret = "this-is-a-very-long-secret-key-for-testing-at-least-32-chars"
+// Honeypot field (website) is filled - indicates spam
+body := `{"name":"Bot","email":"bot@spam.com","subject":"Spam","message":"Buy now!","website":"http://spam.com"}`
+// Should return success but NOT save
 ```
 
 ## Contributing Tests
 
-1. Follow naming: `Test<FunctionName>_<Scenario>`
-2. Organize by function with section markers
+1. Follow naming: `Test<HandlerName>_<Scenario>`
+2. Organize by entity with section markers
 3. Use table-driven tests for multiple scenarios
-4. Use `t.Helper()` in test helper functions
-5. Clean up resources with `t.Cleanup()`
-6. Verify: `task ci:all` or `go test -cover ./...`
+4. Mock only the repository methods needed
+5. Verify: `go test -cover ./internal/handlers/`

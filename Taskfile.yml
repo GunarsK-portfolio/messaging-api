@@ -3,14 +3,14 @@ version: '3'
 tasks:
   # Top-level tasks
   run:
-    desc: Run the API locally
+    desc: Run the messaging API locally
     cmds:
       - go run cmd/api/main.go
 
   build:
-    desc: Build the API binary
+    desc: Build the messaging API binary
     cmds:
-      - go build -o bin/api cmd/api/main.go
+      - go build -o bin/messaging-api cmd/api/main.go
 
   test:
     desc: Run tests
@@ -42,7 +42,7 @@ tasks:
   docker:build:
     desc: Build Docker image
     cmds:
-      - docker build -t api .
+      - docker build -t messaging-api .
 
   docker:run:
     desc: Run service with docker-compose
@@ -50,14 +50,14 @@ tasks:
       - docker-compose up -d
 
   docker:stop:
-    desc: Stop API container
+    desc: Stop messaging-api container
     cmds:
-      - docker stop api
+      - docker stop messaging-api
 
   docker:logs:
-    desc: View API logs
+    desc: View messaging API logs
     cmds:
-      - docker-compose logs -f api
+      - docker-compose logs -f messaging-api
 
   # Development tools
   dev:swagger:
