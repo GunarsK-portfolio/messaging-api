@@ -1,7 +1,8 @@
 package handlers
 
 import (
-	"github.com/GunarsK-templates/template-api/internal/repository"
+	"github.com/GunarsK-portfolio/messaging-api/internal/repository"
+	commonhandlers "github.com/GunarsK-portfolio/portfolio-common/handlers"
 )
 
 // Handler holds dependencies for HTTP handlers
@@ -13,3 +14,6 @@ type Handler struct {
 func New(repo repository.Repository) *Handler {
 	return &Handler{repo: repo}
 }
+
+// setLocationHeader wraps the common helper
+var setLocationHeader = commonhandlers.SetLocationHeader

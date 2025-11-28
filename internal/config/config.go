@@ -1,22 +1,33 @@
 package config
 
-// Config holds all configuration for the service
+import (
+	"fmt"
+
+	"github.com/go-playground/validator/v10"
+
+	common "github.com/GunarsK-portfolio/portfolio-common/config"
+)
+
+// Config holds all configuration for the messaging service
 type Config struct {
-	Service  ServiceConfig
-	Database DatabaseConfig
-	JWT      *JWTConfig // Optional - nil if JWT_SECRET not set
+	common.DatabaseConfig
+	common.ServiceConfig
+	JWTSecret string `validate:"required,min=32"`
 }
 
 // Load loads all configuration from environment variables
 func Load() *Config {
-	return &Config{
-		Service:  NewServiceConfig(),
-		Database: NewDatabaseConfig(),
-		JWT:      NewJWTConfig(),
+	cfg := &Config{
+		DatabaseConfig: common.NewDatabaseConfig(),
+		ServiceConfig:  common.NewServiceConfig("8086"),
+		JWTSecret:      common.GetEnvRequired("JWT_SECRET"),
 	}
-}
 
-// HasJWT returns true if JWT authentication is configured
-func (c *Config) HasJWT() bool {
-	return c.JWT != nil && c.JWT.HasJWT()
+	// Validate service-specific fields
+	validate := validator.New()
+	if err := validate.Struct(cfg); err != nil {
+		panic(fmt.Sprintf("Invalid configuration: %v", err))
+	}
+
+	return cfg
 }

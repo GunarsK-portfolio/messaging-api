@@ -1,260 +1,215 @@
-# Template API
+# Messaging API
 
-A Go REST API template using Gin framework with PostgreSQL.
+![CI](https://github.com/GunarsK-portfolio/messaging-api/workflows/CI/badge.svg)
+[![Go Report Card](https://goreportcard.com/badge/github.com/GunarsK-portfolio/messaging-api)](https://goreportcard.com/report/github.com/GunarsK-portfolio/messaging-api)
+[![codecov](https://codecov.io/gh/GunarsK-portfolio/messaging-api/branch/main/graph/badge.svg)](https://codecov.io/gh/GunarsK-portfolio/messaging-api)
+
+RESTful API for contact form submissions and recipient management.
 
 ## Features
 
-- RESTful API with Gin framework
-- PostgreSQL with GORM ORM
-- Structured logging with slog
-- Prometheus metrics
-- Swagger/OpenAPI documentation
-- Docker support with multi-stage builds
-- CI/CD with GitHub Actions
-- Security scanning (govulncheck, gosec, Trivy)
-- Unit tests with table-driven patterns
+- Public contact form submission endpoint with honeypot spam detection
+- Admin-only contact message viewing
+- Recipient management (CRUD) for email notifications
+- JWT authentication for protected endpoints
+- RESTful API with Swagger documentation
+- Rate limiting via Traefik
 
-## Getting Started
+## Tech Stack
 
-### Prerequisites
+- **Language**: Go 1.25.3
+- **Framework**: Gin
+- **Database**: PostgreSQL (GORM)
+- **Common**: portfolio-common library (shared database utilities, auth middleware)
+- **Auth**: JWT validation via auth-service
+- **Documentation**: Swagger/OpenAPI
+
+## Prerequisites
 
 - Go 1.25+
-- PostgreSQL 15+
-- [Task](https://taskfile.dev/) (optional, for task runner)
+- Node.js 22+ and npm 11+
+- PostgreSQL (or use Docker Compose)
+- auth-service running (for protected endpoints)
 
-### Installation
+## Project Structure
 
-1. Clone the repository:
+```text
+messaging-api/
+├── cmd/
+│   └── api/              # Application entrypoint
+├── internal/
+│   ├── config/           # Configuration
+│   ├── handlers/         # HTTP handlers
+│   ├── repository/       # Data access layer
+│   └── routes/           # Route definitions
+└── docs/                 # Swagger documentation
+```
 
-   ```bash
-   git clone https://github.com/GunarsK-templates/template-api.git
-   cd template-api
-   ```
+## Quick Start
 
-2. Copy environment file:
+### Using Docker Compose
 
-   ```bash
-   cp .env.example .env
-   ```
+```bash
+docker-compose up -d
+```
 
-3. Edit `.env` with your configuration
+### Local Development
 
-4. Install dependencies:
+1. Copy environment file:
 
-   ```bash
-   go mod download
-   ```
+```bash
+cp .env.example .env
+```
 
-5. Run the service:
+1. Update `.env` with your configuration:
 
-   ```bash
-   go run cmd/api/main.go
-   # or with Task
-   task run
-   ```
+```env
+PORT=8086
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=portfolio_messaging
+DB_PASSWORD=portfolio_messaging_dev_pass
+DB_NAME=portfolio
+JWT_SECRET=your-secret-key
+ALLOWED_ORIGINS=http://localhost:3000
+```
 
-### Configuration
+1. Start infrastructure (if not running):
+
+```bash
+# From infrastructure directory
+docker-compose up -d postgres flyway
+```
+
+1. Run the service:
+
+```bash
+go run cmd/api/main.go
+```
+
+## Available Commands
+
+Using Task:
+
+```bash
+# Development
+task dev:swagger         # Generate Swagger documentation
+task dev:install-tools   # Install dev tools (golangci-lint, govulncheck, etc.)
+
+# Build and run
+task build               # Build binary
+task test                # Run tests
+task test:coverage       # Run tests with coverage report
+task clean               # Clean build artifacts
+
+# Code quality
+task format              # Format code with gofmt
+task tidy                # Tidy and verify go.mod
+task lint                # Run golangci-lint
+task vet                 # Run go vet
+
+# Security
+task security:scan       # Run gosec security scanner
+task security:vuln       # Check for vulnerabilities with govulncheck
+
+# Docker
+task docker:build        # Build Docker image
+task docker:run          # Run service in Docker container
+task docker:stop         # Stop running Docker container
+task docker:logs         # View Docker container logs
+
+# CI/CD
+task ci:all              # Run all CI checks
+```
+
+Using Go directly:
+
+```bash
+go run cmd/api/main.go                          # Run
+go build -o bin/messaging-api cmd/api/main.go   # Build
+go test ./...                                   # Test
+```
+
+## API Endpoints
+
+Base URL: `http://localhost:8086/api/v1`
+
+### Health Check
+
+- `GET /health` - Service health status
+
+### Public Endpoints
+
+No authentication required.
+
+#### Contact
+
+- `POST /contact` - Submit a contact message
+
+### Protected Endpoints
+
+All endpoints below require JWT authentication via
+`Authorization: Bearer <token>` header.
+
+#### Messages
+
+- `GET /messages` - List all contact messages
+- `GET /messages/:id` - Get contact message by ID
+
+#### Recipients
+
+- `GET /recipients` - List all recipients
+- `GET /recipients/:id` - Get recipient by ID
+- `POST /recipients` - Create recipient
+- `PUT /recipients/:id` - Update recipient
+- `DELETE /recipients/:id` - Delete recipient
+
+## Swagger Documentation
+
+When running, Swagger UI is available at:
+
+- `http://localhost:8086/swagger/index.html`
+
+(Requires `SWAGGER_HOST` environment variable to be set)
+
+## Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SERVICE_NAME` | Service identifier | `your-service` |
-| `PORT` | HTTP port | `8080` |
-| `ENVIRONMENT` | Environment (development/staging/production) | `development` |
+| `PORT` | Server port | `8086` |
 | `DB_HOST` | PostgreSQL host | - |
 | `DB_PORT` | PostgreSQL port | `5432` |
 | `DB_USER` | Database user | - |
 | `DB_PASSWORD` | Database password | - |
 | `DB_NAME` | Database name | - |
-| `DB_SSL_MODE` | SSL mode | `disable` |
-| `JWT_SECRET` | JWT signing secret (optional) | - |
-| `ALLOWED_ORIGINS` | CORS allowed origins (comma-separated) | `localhost:3000` |
+| `DB_SSLMODE` | PostgreSQL SSL mode | `disable` |
+| `JWT_SECRET` | JWT signing secret | - |
+| `ALLOWED_ORIGINS` | CORS allowed origins (comma-separated) | - |
 | `SWAGGER_HOST` | Swagger host for docs | - |
 
-## Project Structure
+## Authentication
 
-```text
-.
-├── cmd/
-│   └── api/
-│       └── main.go          # Application entry point
-├── internal/
-│   ├── config/
-│   │   ├── config.go        # Main config (combines sub-configs)
-│   │   ├── service.go       # Service configuration
-│   │   ├── database.go      # Database configuration
-│   │   ├── jwt.go           # JWT configuration (optional)
-│   │   └── *_test.go        # Unit tests
-│   ├── handlers/
-│   │   ├── handler.go       # Handler struct and dependencies
-│   │   ├── health.go        # Health check endpoint
-│   │   ├── errors.go        # Error handling utilities
-│   │   └── example.go       # Example CRUD handlers
-│   ├── models/
-│   │   └── item.go          # Data models
-│   ├── repository/
-│   │   ├── repository.go    # Repository interface and DB setup
-│   │   ├── item.go          # Item repository implementation
-│   │   └── errors.go        # Repository errors
-│   ├── routes/
-│   │   └── routes.go        # Route definitions
-│   └── utils/
-│       ├── env.go           # Environment variable helpers
-│       └── env_test.go      # Unit tests
-├── docs/                    # Swagger documentation (generated)
-├── Dockerfile
-├── Taskfile.yml
-├── TESTING.md               # Testing guide
-├── go.mod
-└── README.md
-```
+This API validates JWT tokens issued by auth-service using the
+portfolio-common auth middleware. The middleware:
 
-## API Endpoints
+1. Extracts token from `Authorization: Bearer <token>` header
+2. Validates token signature and expiry
+3. Injects user information into request context
 
-| Method | Endpoint | Description | Auth |
-|--------|----------|-------------|------|
-| GET | `/health` | Health check | No |
-| GET | `/metrics` | Prometheus metrics | No |
-| GET | `/api/v1/items` | List all items | No |
-| GET | `/api/v1/items/:id` | Get item by ID | No |
-| POST | `/api/v1/items` | Create item | Optional |
-| PUT | `/api/v1/items/:id` | Update item | Optional |
-| DELETE | `/api/v1/items/:id` | Delete item | Optional |
+The `/contact` endpoint is public (no auth required) to allow anonymous
+contact form submissions. All other endpoints require authentication.
 
-## Development
+## Spam Protection
 
-### Available Tasks
+The contact form includes honeypot field detection. Messages with non-empty
+honeypot fields are silently accepted but not saved, preventing bots from
+knowing they've been detected.
 
-```bash
-# Run locally
-task run
+## Integration
 
-# Build binary
-task build
-
-# Run tests
-task test
-task test:coverage
-
-# Code quality
-task lint
-task format
-task vet
-task tidy
-task lint:markdown
-
-# Security
-task security:scan
-task security:vuln
-
-# Generate Swagger docs
-task dev:swagger
-
-# Docker
-task docker:build
-task docker:run
-task docker:stop
-task docker:logs
-
-# Run all CI checks
-task ci:all
-
-# Install dev tools
-task dev:install-tools
-
-# Clean build artifacts
-task clean
-```
-
-### Generating Swagger Documentation
-
-```bash
-task dev:swagger
-```
-
-Then access Swagger UI at `http://localhost:8080/swagger/index.html`
-(requires `SWAGGER_HOST` to be set).
-
-## Testing
-
-See [TESTING.md](TESTING.md) for testing guide.
-
-```bash
-# Run all tests
-task test
-
-# Run with coverage
-go test -cover ./...
-
-# Run specific tests
-go test -v -run TestNewDatabaseConfig ./internal/config/
-```
-
-## Docker
-
-### Build
-
-```bash
-docker build -t template-api:latest .
-```
-
-### Run
-
-```bash
-docker run --rm -p 8080:8080 --env-file .env template-api:latest
-```
-
-## Customization
-
-### Adding a New Resource
-
-1. Create model in `internal/models/`:
-
-   ```go
-   type MyResource struct {
-       ID        int64     `json:"id" gorm:"primaryKey"`
-       Name      string    `json:"name" gorm:"size:200;not null"`
-       CreatedAt time.Time `json:"created_at"`
-       UpdatedAt time.Time `json:"updated_at"`
-   }
-   ```
-
-2. Add repository methods in `internal/repository/`:
-
-   ```go
-   // In repository.go interface
-   GetAllMyResources(ctx context.Context) ([]models.MyResource, error)
-   // ... other methods
-
-   // Create myresource.go with implementations
-   ```
-
-3. Add handlers in `internal/handlers/`:
-
-   ```go
-   func (h *Handler) GetMyResources(c *gin.Context) { ... }
-   ```
-
-4. Add routes in `internal/routes/routes.go`:
-
-   ```go
-   myresources := v1.Group("/myresources")
-   {
-       myresources.GET("", handler.GetMyResources)
-       // ...
-   }
-   ```
-
-5. Regenerate Swagger docs:
-
-   ```bash
-   task swagger
-   ```
-
-### Adding Authentication
-
-1. Set `JWT_SECRET` in `.env`
-2. Uncomment auth middleware in `internal/routes/routes.go`
-3. Implement JWT validation middleware
+- **Public website**: Submits contact forms via `/contact` endpoint
+- **Admin panel**: Views messages and manages recipients via protected endpoints
+- **Future**: Message delivery worker will process pending messages
 
 ## License
 
