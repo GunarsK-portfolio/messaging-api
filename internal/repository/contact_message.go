@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/GunarsK-portfolio/portfolio-common/models"
+	"gorm.io/gorm"
 )
 
 // CreateContactMessage creates a new contact message
@@ -52,7 +53,7 @@ func (r *repository) UpdateContactMessageStatus(ctx context.Context, id int64, s
 		updates["sent_at"] = r.db.NowFunc()
 	}
 	if status == models.MessageStatusFailed {
-		updates["attempts"] = r.db.Raw("attempts + 1")
+		updates["attempts"] = gorm.Expr("attempts + 1")
 	}
 
 	result := r.db.WithContext(ctx).
