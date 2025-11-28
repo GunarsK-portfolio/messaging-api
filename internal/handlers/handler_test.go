@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -1286,7 +1285,7 @@ func TestInvalidIDFormats_Recipients(t *testing.T) {
 		})
 
 		t.Run("PUT_"+tt.name, func(t *testing.T) {
-			w := performRequest(router, http.MethodPut, "/api/v1/recipients/"+tt.id, bytes.NewReader([]byte(`{}`)))
+			w := performRequest(router, http.MethodPut, "/api/v1/recipients/"+tt.id, strings.NewReader(`{}`))
 			if w.Code != http.StatusBadRequest {
 				t.Errorf("UpdateRecipient(%q) status = %d, want %d", tt.id, w.Code, http.StatusBadRequest)
 			}

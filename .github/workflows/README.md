@@ -18,6 +18,7 @@ Comprehensive continuous integration pipeline that runs on:
 4. **Docker Build & Scan** - Build image and scan with Trivy for vulnerabilities
 5. **Security Analysis** - Static security analysis with gosec
 6. **Code Quality** - Format checks, go vet, and ineffassign detection
+7. **Secret Scan** - Detect hardcoded secrets with gitleaks
 
 **Security Features:**
 

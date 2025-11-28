@@ -47,9 +47,6 @@ definitions:
       subject:
         maxLength: 500
         type: string
-      website:
-        description: Named "website" to trick bots
-        type: string
     required:
     - email
     - message
@@ -109,7 +106,7 @@ info:
   title: Messaging API
   version: "1.0"
 paths:
-  /api/v1/contact:
+  /contact:
     post:
       consumes:
       - application/json
@@ -145,7 +142,22 @@ paths:
       summary: Submit a contact message
       tags:
       - Contact
-  /api/v1/messages:
+  /health:
+    get:
+      description: Returns service health status
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Health check
+      tags:
+      - Health
+  /messages:
     get:
       description: Returns all contact messages (admin only)
       produces:
@@ -174,7 +186,7 @@ paths:
       summary: Get all contact messages
       tags:
       - Messages
-  /api/v1/messages/{id}:
+  /messages/{id}:
     get:
       description: Returns a single contact message (admin only)
       parameters:
@@ -219,7 +231,7 @@ paths:
       summary: Get contact message by ID
       tags:
       - Messages
-  /api/v1/recipients:
+  /recipients:
     get:
       description: Returns a list of all email recipients (admin only)
       produces:
@@ -289,7 +301,7 @@ paths:
       summary: Create a new recipient
       tags:
       - Recipients
-  /api/v1/recipients/{id}:
+  /recipients/{id}:
     delete:
       description: Deletes a recipient by ID (admin only)
       parameters:
@@ -426,21 +438,6 @@ paths:
       summary: Update a recipient
       tags:
       - Recipients
-  /health:
-    get:
-      description: Returns service health status
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Health check
-      tags:
-      - Health
 securityDefinitions:
   BearerAuth:
     in: header

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"os"
 
 	"github.com/gin-gonic/gin"
@@ -54,7 +53,7 @@ func main() {
 	})
 	if err != nil {
 		appLogger.Error("Failed to connect to database", "error", err)
-		log.Fatal("Failed to connect to database:", err)
+		os.Exit(1)
 	}
 	appLogger.Info("Database connection established")
 
@@ -73,6 +72,6 @@ func main() {
 	serverCfg := server.DefaultConfig(cfg.ServiceConfig.Port)
 	if err := server.Run(router, serverCfg, appLogger); err != nil {
 		appLogger.Error("Server error", "error", err)
-		log.Fatal("Server error:", err)
+		os.Exit(1)
 	}
 }

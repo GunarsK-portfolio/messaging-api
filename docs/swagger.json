@@ -9,7 +9,7 @@
     "host": "localhost:8086",
     "basePath": "/api/v1",
     "paths": {
-        "/api/v1/contact": {
+        "/contact": {
             "post": {
                 "description": "Creates a new contact message (public endpoint)",
                 "consumes": [
@@ -64,7 +64,30 @@
                 }
             }
         },
-        "/api/v1/messages": {
+        "/health": {
+            "get": {
+                "description": "Returns service health status",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Health"
+                ],
+                "summary": "Health check",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/messages": {
             "get": {
                 "security": [
                     {
@@ -110,7 +133,7 @@
                 }
             }
         },
-        "/api/v1/messages/{id}": {
+        "/messages/{id}": {
             "get": {
                 "security": [
                     {
@@ -180,7 +203,7 @@
                 }
             }
         },
-        "/api/v1/recipients": {
+        "/recipients": {
             "get": {
                 "security": [
                     {
@@ -290,7 +313,7 @@
                 }
             }
         },
-        "/api/v1/recipients/{id}": {
+        "/recipients/{id}": {
             "get": {
                 "security": [
                     {
@@ -501,29 +524,6 @@
                     }
                 }
             }
-        },
-        "/health": {
-            "get": {
-                "description": "Returns service health status",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Health"
-                ],
-                "summary": "Health check",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
         }
     },
     "definitions": {
@@ -598,10 +598,6 @@
                 "subject": {
                     "type": "string",
                     "maxLength": 500
-                },
-                "website": {
-                    "description": "Named \"website\" to trick bots",
-                    "type": "string"
                 }
             }
         },

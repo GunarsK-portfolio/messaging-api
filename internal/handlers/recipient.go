@@ -19,7 +19,7 @@ import (
 // @Failure 401 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Security BearerAuth
-// @Router /api/v1/recipients [get]
+// @Router /recipients [get]
 func (h *Handler) GetRecipients(c *gin.Context) {
 	recipients, err := h.repo.GetAllRecipients(c.Request.Context())
 	if err != nil {
@@ -41,7 +41,7 @@ func (h *Handler) GetRecipients(c *gin.Context) {
 // @Failure 404 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Security BearerAuth
-// @Router /api/v1/recipients/{id} [get]
+// @Router /recipients/{id} [get]
 func (h *Handler) GetRecipient(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -69,7 +69,7 @@ func (h *Handler) GetRecipient(c *gin.Context) {
 // @Failure 401 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Security BearerAuth
-// @Router /api/v1/recipients [post]
+// @Router /recipients [post]
 func (h *Handler) CreateRecipient(c *gin.Context) {
 	var req models.RecipientCreate
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -109,7 +109,7 @@ func (h *Handler) CreateRecipient(c *gin.Context) {
 // @Failure 404 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Security BearerAuth
-// @Router /api/v1/recipients/{id} [put]
+// @Router /recipients/{id} [put]
 func (h *Handler) UpdateRecipient(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -160,7 +160,7 @@ func (h *Handler) UpdateRecipient(c *gin.Context) {
 // @Failure 404 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Security BearerAuth
-// @Router /api/v1/recipients/{id} [delete]
+// @Router /recipients/{id} [delete]
 func (h *Handler) DeleteRecipient(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {

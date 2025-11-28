@@ -15,5 +15,5 @@ func New(repo repository.Repository) *Handler {
 	return &Handler{repo: repo}
 }
 
-// setLocationHeader wraps the common helper for backward compatibility
+// setLocationHeader wraps the common helper
 var setLocationHeader = commonhandlers.SetLocationHeader

@@ -20,7 +20,7 @@ import (
 // @Success 201 {object} map[string]string
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
-// @Router /api/v1/contact [post]
+// @Router /contact [post]
 func (h *Handler) CreateContactMessage(c *gin.Context) {
 	var req models.ContactMessageCreate
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -36,12 +36,11 @@ func (h *Handler) CreateContactMessage(c *gin.Context) {
 	}
 
 	message := &models.ContactMessage{
-		Name:     req.Name,
-		Email:    req.Email,
-		Subject:  req.Subject,
-		Message:  req.Message,
-		Honeypot: req.Honeypot,
-		Status:   models.MessageStatusPending,
+		Name:    req.Name,
+		Email:   req.Email,
+		Subject: req.Subject,
+		Message: req.Message,
+		Status:  models.MessageStatusPending,
 	}
 
 	if err := h.repo.CreateContactMessage(c.Request.Context(), message); err != nil {
@@ -61,7 +60,7 @@ func (h *Handler) CreateContactMessage(c *gin.Context) {
 // @Failure 401 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Security BearerAuth
-// @Router /api/v1/messages [get]
+// @Router /messages [get]
 func (h *Handler) GetContactMessages(c *gin.Context) {
 	messages, err := h.repo.GetContactMessages(c.Request.Context())
 	if err != nil {
@@ -84,7 +83,7 @@ func (h *Handler) GetContactMessages(c *gin.Context) {
 // @Failure 404 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Security BearerAuth
-// @Router /api/v1/messages/{id} [get]
+// @Router /messages/{id} [get]
 func (h *Handler) GetContactMessage(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {

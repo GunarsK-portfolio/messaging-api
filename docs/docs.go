@@ -15,7 +15,7 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/api/v1/contact": {
+        "/contact": {
             "post": {
                 "description": "Creates a new contact message (public endpoint)",
                 "consumes": [
@@ -70,7 +70,30 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/v1/messages": {
+        "/health": {
+            "get": {
+                "description": "Returns service health status",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Health"
+                ],
+                "summary": "Health check",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/messages": {
             "get": {
                 "security": [
                     {
@@ -116,7 +139,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/v1/messages/{id}": {
+        "/messages/{id}": {
             "get": {
                 "security": [
                     {
@@ -186,7 +209,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/v1/recipients": {
+        "/recipients": {
             "get": {
                 "security": [
                     {
@@ -296,7 +319,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/v1/recipients/{id}": {
+        "/recipients/{id}": {
             "get": {
                 "security": [
                     {
@@ -507,29 +530,6 @@ const docTemplate = `{
                     }
                 }
             }
-        },
-        "/health": {
-            "get": {
-                "description": "Returns service health status",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Health"
-                ],
-                "summary": "Health check",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
         }
     },
     "definitions": {
@@ -604,10 +604,6 @@ const docTemplate = `{
                 "subject": {
                     "type": "string",
                     "maxLength": 500
-                },
-                "website": {
-                    "description": "Named \"website\" to trick bots",
-                    "type": "string"
                 }
             }
         },
