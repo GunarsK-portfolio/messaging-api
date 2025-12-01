@@ -2,7 +2,8 @@
 
 ![CI](https://github.com/GunarsK-portfolio/messaging-api/workflows/CI/badge.svg)
 [![Go Report Card](https://goreportcard.com/badge/github.com/GunarsK-portfolio/messaging-api)](https://goreportcard.com/report/github.com/GunarsK-portfolio/messaging-api)
-[![codecov](https://codecov.io/gh/GunarsK-portfolio/messaging-api/branch/main/graph/badge.svg)](https://codecov.io/gh/GunarsK-portfolio/messaging-api)
+[![codecov](https://codecov.io/gh/GunarsK-portfolio/messaging-api/graph/badge.svg?token=ZNtpza4CzS)](https://codecov.io/gh/GunarsK-portfolio/messaging-api)
+[![CodeRabbit](https://img.shields.io/coderabbit/prs/github/GunarsK-portfolio/messaging-api?label=CodeRabbit&color=FF570A)](https://coderabbit.ai)
 
 RESTful API for contact form submissions and recipient management.
 
@@ -213,4 +214,4 @@ knowing they've been detected.
 
 ## License
 
-MIT
+[MIT](LICENSE)
