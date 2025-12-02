@@ -69,7 +69,11 @@ func main() {
 		appLogger.Error("Failed to connect to RabbitMQ", "error", err)
 		os.Exit(1)
 	}
-	defer publisher.Close()
+	defer func() {
+		if closeErr := publisher.Close(); closeErr != nil {
+			appLogger.Error("Failed to close RabbitMQ publisher", "error", closeErr)
+		}
+	}()
 	appLogger.Info("RabbitMQ connection established")
 
 	repo := repository.New(db)
