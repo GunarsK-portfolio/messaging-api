@@ -57,6 +57,11 @@ func main() {
 		appLogger.Error("Failed to connect to database", "error", err)
 		os.Exit(1)
 	}
+	defer func() {
+		if closeErr := commondb.CloseDB(db); closeErr != nil {
+			appLogger.Error("Failed to close database", "error", closeErr)
+		}
+	}()
 	appLogger.Info("Database connection established")
 
 	publisher, err := queue.NewRabbitMQPublisher(cfg.RabbitMQConfig)

@@ -2,24 +2,24 @@ services:
   api:
     build: .
     ports:
-      - "8086:8086"
+      - "${PORT}:${PORT}"
     environment:
-      - PORT=8086
+      - PORT=${PORT}
       - DB_HOST=postgres
       - DB_PORT=5432
-      - DB_USER=portfolio_messaging
-      - DB_PASSWORD=portfolio_messaging_dev_pass
-      - DB_NAME=portfolio
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
       - DB_SSL_MODE=disable
-      - JWT_SECRET=your-secret-key-at-least-32-characters-long
-      - ALLOWED_ORIGINS=http://localhost:3000
+      - JWT_SECRET=${JWT_SECRET}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_PORT=5672
-      - RABBITMQ_USER=guest
-      - RABBITMQ_PASSWORD=guest
-      - RABBITMQ_EXCHANGE=contact_messages
-      - RABBITMQ_QUEUE=contact_messages
-      - RABBITMQ_RETRY_DELAYS=1m,5m,30m,2h,12h
+      - RABBITMQ_USER=${RABBITMQ_USER}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      - RABBITMQ_EXCHANGE=${RABBITMQ_EXCHANGE}
+      - RABBITMQ_QUEUE=${RABBITMQ_QUEUE}
+      - RABBITMQ_RETRY_DELAYS=${RABBITMQ_RETRY_DELAYS}
     depends_on:
       postgres:
         condition: service_healthy
@@ -29,15 +29,15 @@ services:
   postgres:
     image: postgres:17-alpine
     environment:
-      POSTGRES_DB: portfolio
-      POSTGRES_USER: portfolio_messaging
-      POSTGRES_PASSWORD: portfolio_messaging_dev_pass
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U portfolio_messaging -d portfolio"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -45,8 +45,8 @@ services:
   rabbitmq:
     image: rabbitmq:4.2-management-alpine
     environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
     ports:
       - "5672:5672"
       - "15672:15672"
