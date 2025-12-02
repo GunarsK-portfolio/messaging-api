@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	commonhandlers "github.com/GunarsK-portfolio/portfolio-common/handlers"
+	"github.com/GunarsK-portfolio/portfolio-common/logger"
 	"github.com/GunarsK-portfolio/portfolio-common/models"
 )
 
@@ -46,6 +47,13 @@ func (h *Handler) CreateContactMessage(c *gin.Context) {
 	if err := h.repo.CreateContactMessage(c.Request.Context(), message); err != nil {
 		commonhandlers.LogAndRespondError(c, http.StatusInternalServerError, err, "Failed to submit message")
 		return
+	}
+
+	// Publish to queue for async processing (email notifications)
+	event := models.ContactMessageEvent{MessageID: message.ID}
+	if err := h.publisher.Publish(c.Request.Context(), event); err != nil {
+		// Log error but don't fail the request - message is saved, notification can be retried
+		logger.GetLogger(c).Error("Failed to publish message to queue", "error", err, "messageId", message.ID)
 	}
 
 	c.JSON(http.StatusCreated, gin.H{"message": "Thank you for your message"})

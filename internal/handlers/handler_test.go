@@ -13,6 +13,7 @@ import (
 
 	"github.com/GunarsK-portfolio/messaging-api/internal/repository"
 	"github.com/GunarsK-portfolio/portfolio-common/models"
+	"github.com/GunarsK-portfolio/portfolio-common/queue"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -106,6 +107,49 @@ func (m *mockRepository) DeleteRecipient(ctx context.Context, id int64) error {
 
 // Verify mock implements Repository interface
 var _ repository.Repository = (*mockRepository)(nil)
+
+// =============================================================================
+// Mock Publisher
+// =============================================================================
+
+type mockPublisher struct {
+	publishFunc        func(ctx context.Context, message interface{}) error
+	publishToRetryFunc func(ctx context.Context, retryIndex int, body []byte, correlationId string) error
+	publishToDLQFunc   func(ctx context.Context, body []byte, correlationId string) error
+	maxRetries         int
+}
+
+func (m *mockPublisher) Publish(ctx context.Context, message interface{}) error {
+	if m.publishFunc != nil {
+		return m.publishFunc(ctx, message)
+	}
+	return nil
+}
+
+func (m *mockPublisher) PublishToRetry(ctx context.Context, retryIndex int, body []byte, correlationId string) error {
+	if m.publishToRetryFunc != nil {
+		return m.publishToRetryFunc(ctx, retryIndex, body, correlationId)
+	}
+	return nil
+}
+
+func (m *mockPublisher) PublishToDLQ(ctx context.Context, body []byte, correlationId string) error {
+	if m.publishToDLQFunc != nil {
+		return m.publishToDLQFunc(ctx, body, correlationId)
+	}
+	return nil
+}
+
+func (m *mockPublisher) MaxRetries() int {
+	return m.maxRetries
+}
+
+func (m *mockPublisher) Close() error {
+	return nil
+}
+
+// Verify mock implements Publisher interface
+var _ queue.Publisher = (*mockPublisher)(nil)
 
 // =============================================================================
 // Test Helpers
@@ -202,13 +246,17 @@ func createTestRecipients() []models.Recipient {
 
 func TestNew_ReturnsHandler(t *testing.T) {
 	mockRepo := &mockRepository{}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	if handler == nil {
 		t.Fatal("expected handler to not be nil")
 	}
 	if handler.repo == nil {
 		t.Error("expected repo to be set")
+	}
+	if handler.publisher == nil {
+		t.Error("expected publisher to be set")
 	}
 }
 
@@ -218,7 +266,8 @@ func TestNew_ReturnsHandler(t *testing.T) {
 
 func TestHealthCheck_Success(t *testing.T) {
 	mockRepo := &mockRepository{}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.GET("/health", handler.HealthCheck)
@@ -247,7 +296,8 @@ func TestCreateContactMessage_Success(t *testing.T) {
 			return nil
 		},
 	}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.POST("/api/v1/contact", handler.CreateContactMessage)
@@ -285,7 +335,8 @@ func TestCreateContactMessage_SpamDetected(t *testing.T) {
 			return nil
 		},
 	}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.POST("/api/v1/contact", handler.CreateContactMessage)
@@ -311,7 +362,8 @@ func TestCreateContactMessage_SpamDetected(t *testing.T) {
 
 func TestCreateContactMessage_ValidationError(t *testing.T) {
 	mockRepo := &mockRepository{}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.POST("/api/v1/contact", handler.CreateContactMessage)
@@ -327,7 +379,8 @@ func TestCreateContactMessage_ValidationError(t *testing.T) {
 
 func TestCreateContactMessage_InvalidEmail(t *testing.T) {
 	mockRepo := &mockRepository{}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.POST("/api/v1/contact", handler.CreateContactMessage)
@@ -346,7 +399,8 @@ func TestCreateContactMessage_RepositoryError(t *testing.T) {
 			return errors.New("database error")
 		},
 	}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.POST("/api/v1/contact", handler.CreateContactMessage)
@@ -361,7 +415,8 @@ func TestCreateContactMessage_RepositoryError(t *testing.T) {
 
 func TestCreateContactMessage_InvalidJSON(t *testing.T) {
 	mockRepo := &mockRepository{}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.POST("/api/v1/contact", handler.CreateContactMessage)
@@ -385,7 +440,8 @@ func TestGetContactMessages_Success(t *testing.T) {
 			return expected, nil
 		},
 	}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.GET("/api/v1/messages", handler.GetContactMessages)
@@ -412,7 +468,8 @@ func TestGetContactMessages_Empty(t *testing.T) {
 			return []models.ContactMessage{}, nil
 		},
 	}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.GET("/api/v1/messages", handler.GetContactMessages)
@@ -439,7 +496,8 @@ func TestGetContactMessages_RepositoryError(t *testing.T) {
 			return nil, errors.New("database error")
 		},
 	}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.GET("/api/v1/messages", handler.GetContactMessages)
@@ -465,7 +523,8 @@ func TestGetContactMessage_Success(t *testing.T) {
 			return expected, nil
 		},
 	}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.GET("/api/v1/messages/:id", handler.GetContactMessage)
@@ -491,7 +550,8 @@ func TestGetContactMessage_Success(t *testing.T) {
 
 func TestGetContactMessage_InvalidID(t *testing.T) {
 	mockRepo := &mockRepository{}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.GET("/api/v1/messages/:id", handler.GetContactMessage)
@@ -513,7 +573,8 @@ func TestGetContactMessage_NotFound(t *testing.T) {
 			return nil, gorm.ErrRecordNotFound
 		},
 	}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.GET("/api/v1/messages/:id", handler.GetContactMessage)
@@ -531,7 +592,8 @@ func TestGetContactMessage_RepositoryError(t *testing.T) {
 			return nil, errors.New("database error")
 		},
 	}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.GET("/api/v1/messages/:id", handler.GetContactMessage)
@@ -554,7 +616,8 @@ func TestGetRecipients_Success(t *testing.T) {
 			return expected, nil
 		},
 	}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.GET("/api/v1/recipients", handler.GetRecipients)
@@ -581,7 +644,8 @@ func TestGetRecipients_Empty(t *testing.T) {
 			return []models.Recipient{}, nil
 		},
 	}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.GET("/api/v1/recipients", handler.GetRecipients)
@@ -608,7 +672,8 @@ func TestGetRecipients_RepositoryError(t *testing.T) {
 			return nil, errors.New("database error")
 		},
 	}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.GET("/api/v1/recipients", handler.GetRecipients)
@@ -634,7 +699,8 @@ func TestGetRecipient_Success(t *testing.T) {
 			return expected, nil
 		},
 	}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.GET("/api/v1/recipients/:id", handler.GetRecipient)
@@ -660,7 +726,8 @@ func TestGetRecipient_Success(t *testing.T) {
 
 func TestGetRecipient_InvalidID(t *testing.T) {
 	mockRepo := &mockRepository{}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.GET("/api/v1/recipients/:id", handler.GetRecipient)
@@ -682,7 +749,8 @@ func TestGetRecipient_NotFound(t *testing.T) {
 			return nil, gorm.ErrRecordNotFound
 		},
 	}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.GET("/api/v1/recipients/:id", handler.GetRecipient)
@@ -700,7 +768,8 @@ func TestGetRecipient_RepositoryError(t *testing.T) {
 			return nil, errors.New("database error")
 		},
 	}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.GET("/api/v1/recipients/:id", handler.GetRecipient)
@@ -725,7 +794,8 @@ func TestCreateRecipient_Success(t *testing.T) {
 			return nil
 		},
 	}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.POST("/api/v1/recipients", handler.CreateRecipient)
@@ -766,7 +836,8 @@ func TestCreateRecipient_WithIsActiveFalse(t *testing.T) {
 			return nil
 		},
 	}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.POST("/api/v1/recipients", handler.CreateRecipient)
@@ -788,7 +859,8 @@ func TestCreateRecipient_WithIsActiveFalse(t *testing.T) {
 
 func TestCreateRecipient_ValidationError(t *testing.T) {
 	mockRepo := &mockRepository{}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.POST("/api/v1/recipients", handler.CreateRecipient)
@@ -804,7 +876,8 @@ func TestCreateRecipient_ValidationError(t *testing.T) {
 
 func TestCreateRecipient_InvalidEmail(t *testing.T) {
 	mockRepo := &mockRepository{}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.POST("/api/v1/recipients", handler.CreateRecipient)
@@ -823,7 +896,8 @@ func TestCreateRecipient_RepositoryError(t *testing.T) {
 			return errors.New("database error")
 		},
 	}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.POST("/api/v1/recipients", handler.CreateRecipient)
@@ -838,7 +912,8 @@ func TestCreateRecipient_RepositoryError(t *testing.T) {
 
 func TestCreateRecipient_InvalidJSON(t *testing.T) {
 	mockRepo := &mockRepository{}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.POST("/api/v1/recipients", handler.CreateRecipient)
@@ -872,7 +947,8 @@ func TestUpdateRecipient_Success(t *testing.T) {
 			return nil
 		},
 	}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.PUT("/api/v1/recipients/:id", handler.UpdateRecipient)
@@ -911,7 +987,8 @@ func TestUpdateRecipient_PartialUpdate(t *testing.T) {
 			return nil
 		},
 	}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.PUT("/api/v1/recipients/:id", handler.UpdateRecipient)
@@ -943,7 +1020,8 @@ func TestUpdateRecipient_PartialUpdate(t *testing.T) {
 
 func TestUpdateRecipient_InvalidID(t *testing.T) {
 	mockRepo := &mockRepository{}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.PUT("/api/v1/recipients/:id", handler.UpdateRecipient)
@@ -966,7 +1044,8 @@ func TestUpdateRecipient_NotFound(t *testing.T) {
 			return nil, gorm.ErrRecordNotFound
 		},
 	}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.PUT("/api/v1/recipients/:id", handler.UpdateRecipient)
@@ -987,7 +1066,8 @@ func TestUpdateRecipient_ValidationError(t *testing.T) {
 			return &copy, nil
 		},
 	}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.PUT("/api/v1/recipients/:id", handler.UpdateRecipient)
@@ -1012,7 +1092,8 @@ func TestUpdateRecipient_RepositoryError(t *testing.T) {
 			return errors.New("database error")
 		},
 	}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.PUT("/api/v1/recipients/:id", handler.UpdateRecipient)
@@ -1040,7 +1121,8 @@ func TestDeleteRecipient_Success(t *testing.T) {
 			return nil
 		},
 	}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.DELETE("/api/v1/recipients/:id", handler.DeleteRecipient)
@@ -1058,7 +1140,8 @@ func TestDeleteRecipient_Success(t *testing.T) {
 
 func TestDeleteRecipient_InvalidID(t *testing.T) {
 	mockRepo := &mockRepository{}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.DELETE("/api/v1/recipients/:id", handler.DeleteRecipient)
@@ -1080,7 +1163,8 @@ func TestDeleteRecipient_NotFound(t *testing.T) {
 			return gorm.ErrRecordNotFound
 		},
 	}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.DELETE("/api/v1/recipients/:id", handler.DeleteRecipient)
@@ -1098,7 +1182,8 @@ func TestDeleteRecipient_RepositoryError(t *testing.T) {
 			return errors.New("database error")
 		},
 	}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.DELETE("/api/v1/recipients/:id", handler.DeleteRecipient)
@@ -1124,7 +1209,8 @@ func TestCreateContactMessage_ContextPropagation(t *testing.T) {
 			return nil
 		},
 	}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -1162,7 +1248,8 @@ func TestGetContactMessages_ContextPropagation(t *testing.T) {
 			return []models.ContactMessage{}, nil
 		},
 	}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -1198,7 +1285,8 @@ func TestGetRecipients_ContextPropagation(t *testing.T) {
 			return []models.Recipient{}, nil
 		},
 	}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -1232,7 +1320,8 @@ func TestGetRecipients_ContextPropagation(t *testing.T) {
 
 func TestInvalidIDFormats_Messages(t *testing.T) {
 	mockRepo := &mockRepository{}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.GET("/api/v1/messages/:id", handler.GetContactMessage)
@@ -1259,7 +1348,8 @@ func TestInvalidIDFormats_Messages(t *testing.T) {
 
 func TestInvalidIDFormats_Recipients(t *testing.T) {
 	mockRepo := &mockRepository{}
-	handler := New(mockRepo)
+	mockPub := &mockPublisher{}
+	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.GET("/api/v1/recipients/:id", handler.GetRecipient)

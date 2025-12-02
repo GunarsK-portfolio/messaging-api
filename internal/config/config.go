@@ -12,6 +12,7 @@ import (
 type Config struct {
 	common.DatabaseConfig
 	common.ServiceConfig
+	common.RabbitMQConfig
 	JWTSecret string `validate:"required,min=32"`
 }
 
@@ -19,7 +20,8 @@ type Config struct {
 func Load() *Config {
 	cfg := &Config{
 		DatabaseConfig: common.NewDatabaseConfig(),
-		ServiceConfig:  common.NewServiceConfig("8086"),
+		ServiceConfig:  common.NewServiceConfig(8086),
+		RabbitMQConfig: common.NewRabbitMQConfig(),
 		JWTSecret:      common.GetEnvRequired("JWT_SECRET"),
 	}
 

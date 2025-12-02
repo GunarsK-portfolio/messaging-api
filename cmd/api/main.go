@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 
@@ -13,6 +14,7 @@ import (
 	commondb "github.com/GunarsK-portfolio/portfolio-common/database"
 	"github.com/GunarsK-portfolio/portfolio-common/logger"
 	"github.com/GunarsK-portfolio/portfolio-common/metrics"
+	"github.com/GunarsK-portfolio/portfolio-common/queue"
 	"github.com/GunarsK-portfolio/portfolio-common/server"
 )
 
@@ -44,7 +46,7 @@ func main() {
 	//nolint:staticcheck // Embedded field name required due to ambiguous fields
 	db, err := commondb.Connect(commondb.PostgresConfig{
 		Host:     cfg.DatabaseConfig.Host,
-		Port:     cfg.DatabaseConfig.Port,
+		Port:     strconv.Itoa(cfg.DatabaseConfig.Port),
 		User:     cfg.DatabaseConfig.User,
 		Password: cfg.DatabaseConfig.Password,
 		DBName:   cfg.DatabaseConfig.Name,
@@ -57,8 +59,16 @@ func main() {
 	}
 	appLogger.Info("Database connection established")
 
+	publisher, err := queue.NewRabbitMQPublisher(cfg.RabbitMQConfig)
+	if err != nil {
+		appLogger.Error("Failed to connect to RabbitMQ", "error", err)
+		os.Exit(1)
+	}
+	defer publisher.Close()
+	appLogger.Info("RabbitMQ connection established")
+
 	repo := repository.New(db)
-	handler := handlers.New(repo)
+	handler := handlers.New(repo, publisher)
 
 	router := gin.New()
 	router.Use(logger.Recovery(appLogger))
@@ -69,7 +79,7 @@ func main() {
 
 	appLogger.Info("Messaging API ready", "port", cfg.ServiceConfig.Port, "environment", os.Getenv("ENVIRONMENT"))
 
-	serverCfg := server.DefaultConfig(cfg.ServiceConfig.Port)
+	serverCfg := server.DefaultConfig(strconv.Itoa(cfg.ServiceConfig.Port))
 	if err := server.Run(router, serverCfg, appLogger); err != nil {
 		appLogger.Error("Server error", "error", err)
 		os.Exit(1)
