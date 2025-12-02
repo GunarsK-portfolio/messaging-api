@@ -3,7 +3,7 @@ module github.com/GunarsK-portfolio/messaging-api
 go 1.25.3
 
 require (
-	github.com/GunarsK-portfolio/portfolio-common v0.30.0
+	github.com/GunarsK-portfolio/portfolio-common v0.32.0
 	github.com/gin-gonic/gin v1.11.0
 	github.com/go-playground/validator/v10 v10.28.0
 	github.com/prometheus/client_golang v1.23.2
@@ -55,6 +55,7 @@ require (
 	github.com/prometheus/procfs v0.16.1 // indirect
 	github.com/quic-go/qpack v0.5.1 // indirect
 	github.com/quic-go/quic-go v0.54.1 // indirect
+	github.com/rabbitmq/amqp091-go v1.10.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.0 // indirect
 	go.uber.org/mock v0.5.0 // indirect

@@ -21,7 +21,8 @@ RESTful API for contact form submissions and recipient management.
 - **Language**: Go 1.25.3
 - **Framework**: Gin
 - **Database**: PostgreSQL (GORM)
-- **Common**: portfolio-common library (shared database utilities, auth middleware)
+- **Message Queue**: RabbitMQ (async email notification processing)
+- **Common**: portfolio-common library (database, auth, queue)
 - **Auth**: JWT validation via auth-service
 - **Documentation**: Swagger/OpenAPI
 
@@ -30,6 +31,7 @@ RESTful API for contact form submissions and recipient management.
 - Go 1.25+
 - Node.js 22+ and npm 11+
 - PostgreSQL (or use Docker Compose)
+- RabbitMQ (or use Docker Compose)
 - auth-service running (for protected endpoints)
 
 ## Project Structure
@@ -62,24 +64,13 @@ docker-compose up -d
 cp .env.example .env
 ```
 
-1. Update `.env` with your configuration:
-
-```env
-PORT=8086
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=portfolio_messaging
-DB_PASSWORD=portfolio_messaging_dev_pass
-DB_NAME=portfolio
-JWT_SECRET=your-secret-key
-ALLOWED_ORIGINS=http://localhost:3000
-```
+1. Update `.env` with your configuration (see [.env.example](.env.example)).
 
 1. Start infrastructure (if not running):
 
 ```bash
 # From infrastructure directory
-docker-compose up -d postgres flyway
+docker-compose up -d postgres flyway rabbitmq
 ```
 
 1. Run the service:
@@ -175,18 +166,7 @@ When running, Swagger UI is available at:
 
 ## Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PORT` | Server port | `8086` |
-| `DB_HOST` | PostgreSQL host | - |
-| `DB_PORT` | PostgreSQL port | `5432` |
-| `DB_USER` | Database user | - |
-| `DB_PASSWORD` | Database password | - |
-| `DB_NAME` | Database name | - |
-| `DB_SSLMODE` | PostgreSQL SSL mode | `disable` |
-| `JWT_SECRET` | JWT signing secret | - |
-| `ALLOWED_ORIGINS` | CORS allowed origins (comma-separated) | - |
-| `SWAGGER_HOST` | Swagger host for docs | - |
+See [.env.example](.env.example) for all available configuration options.
 
 ## Authentication
 
@@ -206,11 +186,27 @@ The contact form includes honeypot field detection. Messages with non-empty
 honeypot fields are silently accepted but not saved, preventing bots from
 knowing they've been detected.
 
+## Message Queue Architecture
+
+When a contact message is submitted:
+
+1. Message is validated and saved to the database
+2. A `ContactMessageEvent` is published to RabbitMQ for async processing
+3. A separate service (messaging-service) consumes messages and sends email notifications
+
+The queue setup includes:
+
+- **Main queue**: `contact_messages` - receives new message events
+- **Retry queues**: Progressive delays (1m, 5m, 30m, 2h, 12h) for failed deliveries
+- **Dead letter queue**: `contact_messages_dlq` - permanent failures after all retries
+
+If publishing fails, the message is still saved (logged error, doesn't fail request).
+
 ## Integration
 
 - **Public website**: Submits contact forms via `/contact` endpoint
 - **Admin panel**: Views messages and manages recipients via protected endpoints
-- **Future**: Message delivery worker will process pending messages
+- **messaging-service**: Consumes queue messages and sends email notifications
 
 ## License
 
