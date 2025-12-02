@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/GunarsK-portfolio/messaging-api/internal/repository"
 	"github.com/GunarsK-portfolio/messaging-api/internal/routes"
 	commondb "github.com/GunarsK-portfolio/portfolio-common/database"
+	"github.com/GunarsK-portfolio/portfolio-common/health"
 	"github.com/GunarsK-portfolio/portfolio-common/logger"
 	"github.com/GunarsK-portfolio/portfolio-common/metrics"
 	"github.com/GunarsK-portfolio/portfolio-common/queue"
@@ -76,6 +78,11 @@ func main() {
 	}()
 	appLogger.Info("RabbitMQ connection established")
 
+	// Health checks
+	healthAgg := health.NewAggregator(3 * time.Second)
+	healthAgg.Register(health.NewPostgresChecker(db))
+	healthAgg.Register(health.NewRabbitMQChecker(publisher.Connection()))
+
 	repo := repository.New(db)
 	handler := handlers.New(repo, publisher)
 
@@ -84,7 +91,7 @@ func main() {
 	router.Use(logger.RequestLogger(appLogger))
 	router.Use(metricsCollector.Middleware())
 
-	routes.Setup(router, handler, cfg, metricsCollector)
+	routes.Setup(router, handler, cfg, metricsCollector, healthAgg)
 
 	appLogger.Info("Messaging API ready", "port", cfg.ServiceConfig.Port, "environment", os.Getenv("ENVIRONMENT"))
 
