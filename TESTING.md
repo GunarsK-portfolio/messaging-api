@@ -30,16 +30,15 @@ go test -v -run Recipient ./internal/handlers/
 
 ## Test Files
 
-**`handlers/`** - 42 tests
+**`handlers/`** - 52 tests
 
 | Category | Tests | Coverage |
 |----------|-------|----------|
 | Constructor | 1 | Handler initialization |
-| Health Check | 1 | HealthCheck endpoint |
-| Contact Messages | 20 | Create, GetAll, GetByID + edge cases |
-| Recipients | 20 | GetAll, GetByID, Create, Update, Delete + errors |
+| Contact Messages | 26 | Create, GetAll, GetByID + edge cases |
+| Recipients | 25 | GetAll, GetByID, Create, Update, Delete + errors |
 
-Tests are split by source file: `handler_test.go`, `health_test.go`,
+Tests are split by source file: `handler_test.go`,
 `contact_message_test.go`, `recipient_test.go`, `mocks_test.go`.
 
 ## Key Testing Patterns

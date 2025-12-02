@@ -11,13 +11,14 @@ import (
 	"github.com/GunarsK-portfolio/messaging-api/docs"
 	"github.com/GunarsK-portfolio/messaging-api/internal/config"
 	"github.com/GunarsK-portfolio/messaging-api/internal/handlers"
+	"github.com/GunarsK-portfolio/portfolio-common/health"
 	"github.com/GunarsK-portfolio/portfolio-common/jwt"
 	"github.com/GunarsK-portfolio/portfolio-common/metrics"
 	common "github.com/GunarsK-portfolio/portfolio-common/middleware"
 )
 
 // Setup configures all routes for the service
-func Setup(router *gin.Engine, handler *handlers.Handler, cfg *config.Config, metricsCollector *metrics.Metrics) {
+func Setup(router *gin.Engine, handler *handlers.Handler, cfg *config.Config, metricsCollector *metrics.Metrics, healthAgg *health.Aggregator) {
 	// Security middleware with CORS validation
 	securityMiddleware := common.NewSecurityMiddleware(
 		cfg.AllowedOrigins,
@@ -28,7 +29,7 @@ func Setup(router *gin.Engine, handler *handlers.Handler, cfg *config.Config, me
 	router.Use(securityMiddleware.Apply())
 
 	// Health check
-	router.GET("/health", handler.HealthCheck)
+	router.GET("/health", healthAgg.Handler())
 
 	// Metrics
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
