@@ -142,21 +142,6 @@ paths:
       summary: Submit a contact message
       tags:
       - Contact
-  /health:
-    get:
-      description: Returns service health status
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Health check
-      tags:
-      - Health
   /messages:
     get:
       description: Returns all contact messages (admin only)
