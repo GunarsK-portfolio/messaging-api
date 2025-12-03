@@ -10,6 +10,7 @@ import (
 	"github.com/GunarsK-portfolio/portfolio-common/models"
 	"github.com/GunarsK-portfolio/portfolio-common/queue"
 	"github.com/gin-gonic/gin"
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 // =============================================================================
@@ -108,7 +109,7 @@ var _ repository.Repository = (*mockRepository)(nil)
 
 type mockPublisher struct {
 	publishFunc        func(ctx context.Context, message interface{}) error
-	publishToRetryFunc func(ctx context.Context, retryIndex int, body []byte, correlationId string) error
+	publishToRetryFunc func(ctx context.Context, retryIndex int, body []byte, correlationId string, headers amqp.Table) error
 	publishToDLQFunc   func(ctx context.Context, body []byte, correlationId string) error
 	maxRetries         int
 }
@@ -120,9 +121,9 @@ func (m *mockPublisher) Publish(ctx context.Context, message interface{}) error 
 	return nil
 }
 
-func (m *mockPublisher) PublishToRetry(ctx context.Context, retryIndex int, body []byte, correlationId string) error {
+func (m *mockPublisher) PublishToRetry(ctx context.Context, retryIndex int, body []byte, correlationId string, headers amqp.Table) error {
 	if m.publishToRetryFunc != nil {
-		return m.publishToRetryFunc(ctx, retryIndex, body, correlationId)
+		return m.publishToRetryFunc(ctx, retryIndex, body, correlationId, headers)
 	}
 	return nil
 }
