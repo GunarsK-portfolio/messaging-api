@@ -33,7 +33,7 @@ go test -v -run Recipient ./internal/handlers/
 **`handlers/`** - 52 tests
 
 | Category | Tests | Coverage |
-|----------|-------|----------|
+| -------- | ----- | -------- |
 | Constructor | 1 | Handler initialization |
 | Contact Messages | 26 | Create, GetAll, GetByID + edge cases |
 | Recipients | 25 | GetAll, GetByID, Create, Update, Delete + errors |
