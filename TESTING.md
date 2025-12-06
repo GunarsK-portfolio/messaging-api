@@ -3,20 +3,27 @@
 ## Overview
 
 The messaging-api uses Go's standard `testing` package with httptest for handler
-unit tests. This service handles contact form submissions and recipient management.
+and route-level unit tests. **79 tests total** across handlers and routes.
+This service handles contact form submissions and recipient management.
 
 ## Quick Commands
 
 ```bash
 # Run all tests
-go test ./internal/handlers/
+go test ./...
 
 # Run with coverage
-go test -cover ./internal/handlers/
+go test -cover ./...
 
 # Generate coverage report
-go test -coverprofile=coverage.out ./internal/handlers/
+go test -coverprofile=coverage.out ./...
 go tool cover -html=coverage.out -o coverage.html
+
+# Run handler tests only
+go test -v ./internal/handlers/
+
+# Run route RBAC tests only
+go test -v ./internal/routes/
 
 # Run specific test
 go test -v -run TestCreateContactMessage_Success ./internal/handlers/
@@ -26,11 +33,14 @@ go test -v -run ContactMessage ./internal/handlers/
 
 # Run all Recipient tests
 go test -v -run Recipient ./internal/handlers/
+
+# Run permission tests
+go test -v -run Permission ./internal/routes/
 ```
 
 ## Test Files
 
-**`handlers/`** - 52 tests
+### `internal/handlers/` - 52 tests
 
 | Category | Tests | Coverage |
 | -------- | ----- | -------- |
@@ -40,6 +50,18 @@ go test -v -run Recipient ./internal/handlers/
 
 Tests are split by source file: `handler_test.go`,
 `contact_message_test.go`, `recipient_test.go`, `mocks_test.go`.
+
+### `internal/routes/` - 27 tests
+
+| Category | Tests | Coverage |
+| -------- | ----- | -------- |
+| Messages Routes Forbidden | 2 | GET endpoints return 403 without permission |
+| Messages Routes Allowed | 2 | GET endpoints accessible with read permission |
+| Recipients Routes Forbidden | 5 | All CRUD endpoints return 403 without permission |
+| Recipients Routes Allowed | 5 | All CRUD endpoints accessible with correct permission |
+| Permission Hierarchy | 11 | delete > edit > read > none for both resources |
+| Cross-Resource Permissions | 1 | Messages permission doesn't grant recipients access |
+| Middleware Error Handling | 2 | No scopes (401), invalid format (500) |
 
 ## Key Testing Patterns
 
@@ -94,6 +116,14 @@ recipient := createTestRecipient()
 - Unicode and special characters
 - Max length boundary validation
 - Malicious content (SQL injection, XSS, HTML)
+
+### RBAC Cases (routes_test.go)
+
+- Permission denied (403) - missing or insufficient permission
+- Permission granted - exact match or higher level
+- Unauthorized (401) - no scopes in context
+- Internal error (500) - invalid scopes format
+- Cross-resource isolation (messages permission ≠ recipients access)
 
 ## API Characteristics
 
