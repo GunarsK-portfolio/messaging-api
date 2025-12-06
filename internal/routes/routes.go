@@ -58,18 +58,18 @@ func Setup(router *gin.Engine, handler *handlers.Handler, cfg *config.Config, me
 		// Contact messages (read-only for admin)
 		messages := protected.Group("/messages")
 		{
-			messages.GET("", handler.GetContactMessages)
-			messages.GET("/:id", handler.GetContactMessage)
+			messages.GET("", common.RequirePermission(common.ResourceMessages, common.LevelRead), handler.GetContactMessages)
+			messages.GET("/:id", common.RequirePermission(common.ResourceMessages, common.LevelRead), handler.GetContactMessage)
 		}
 
 		// Recipients management (full CRUD for admin)
 		recipients := protected.Group("/recipients")
 		{
-			recipients.GET("", handler.GetRecipients)
-			recipients.GET("/:id", handler.GetRecipient)
-			recipients.POST("", handler.CreateRecipient)
-			recipients.PUT("/:id", handler.UpdateRecipient)
-			recipients.DELETE("/:id", handler.DeleteRecipient)
+			recipients.GET("", common.RequirePermission(common.ResourceRecipients, common.LevelRead), handler.GetRecipients)
+			recipients.GET("/:id", common.RequirePermission(common.ResourceRecipients, common.LevelRead), handler.GetRecipient)
+			recipients.POST("", common.RequirePermission(common.ResourceRecipients, common.LevelEdit), handler.CreateRecipient)
+			recipients.PUT("/:id", common.RequirePermission(common.ResourceRecipients, common.LevelEdit), handler.UpdateRecipient)
+			recipients.DELETE("/:id", common.RequirePermission(common.ResourceRecipients, common.LevelDelete), handler.DeleteRecipient)
 		}
 	}
 
