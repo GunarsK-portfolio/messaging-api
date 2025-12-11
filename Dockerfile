@@ -17,7 +17,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o service ./cmd/api
 
 # Production stage
-FROM alpine:3.22
+FROM alpine:3.23
 
 # Security updates and ca-certificates for HTTPS
 RUN apk upgrade --no-cache && apk add --no-cache ca-certificates tzdata
