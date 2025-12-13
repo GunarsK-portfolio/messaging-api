@@ -5,7 +5,7 @@ go 1.25.5
 require (
 	github.com/GunarsK-portfolio/portfolio-common v0.40.0
 	github.com/gin-gonic/gin v1.11.0
-	github.com/go-playground/validator/v10 v10.28.0
+	github.com/go-playground/validator/v10 v10.29.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/rabbitmq/amqp091-go v1.10.0
 	github.com/swaggo/files v1.0.1
