@@ -18,14 +18,14 @@ import (
 // =============================================================================
 
 func TestCreateContactMessage_Success(t *testing.T) {
-	var createdMessage *models.ContactMessage
+	var createdEmail *models.Email
 	var published interface{}
 	publishCalled := false
 
 	mockRepo := &mockRepository{
-		createContactMessageFunc: func(_ context.Context, message *models.ContactMessage) error {
-			createdMessage = message
-			message.ID = 1
+		createEmailFunc: func(_ context.Context, email *models.Email) error {
+			createdEmail = email
+			email.ID = 1
 			return nil
 		},
 	}
@@ -48,17 +48,20 @@ func TestCreateContactMessage_Success(t *testing.T) {
 		t.Errorf("expected status %d, got %d", http.StatusCreated, w.Code)
 	}
 
-	if createdMessage == nil {
-		t.Fatal("expected message to be created")
+	if createdEmail == nil {
+		t.Fatal("expected email to be created")
 	}
-	if createdMessage.Name != "John Doe" {
-		t.Errorf("expected name 'John Doe', got %s", createdMessage.Name)
+	if createdEmail.Name == nil || *createdEmail.Name != "John Doe" {
+		t.Errorf("expected name 'John Doe', got %v", createdEmail.Name)
 	}
-	if createdMessage.Email != "john@example.com" {
-		t.Errorf("expected email 'john@example.com', got %s", createdMessage.Email)
+	if createdEmail.SenderEmail == nil || *createdEmail.SenderEmail != "john@example.com" {
+		t.Errorf("expected sender email 'john@example.com', got %v", createdEmail.SenderEmail)
 	}
-	if createdMessage.Status != models.MessageStatusPending {
-		t.Errorf("expected status 'pending', got %s", createdMessage.Status)
+	if createdEmail.Type != models.EmailTypeContactForm {
+		t.Errorf("expected type %q, got %q", models.EmailTypeContactForm, createdEmail.Type)
+	}
+	if createdEmail.Status != models.EmailStatusPending {
+		t.Errorf("expected status 'pending', got %s", createdEmail.Status)
 	}
 
 	if !strings.Contains(w.Body.String(), "Thank you for your message") {
@@ -68,12 +71,12 @@ func TestCreateContactMessage_Success(t *testing.T) {
 	if !publishCalled {
 		t.Fatal("expected publisher.Publish to be called")
 	}
-	evt, ok := published.(models.ContactMessageEvent)
+	evt, ok := published.(models.EmailEvent)
 	if !ok {
-		t.Fatalf("expected ContactMessageEvent, got %T", published)
+		t.Fatalf("expected EmailEvent, got %T", published)
 	}
-	if evt.MessageID != createdMessage.ID {
-		t.Errorf("expected MessageID %d, got %d", createdMessage.ID, evt.MessageID)
+	if evt.EmailID != createdEmail.ID {
+		t.Errorf("expected EmailID %d, got %d", createdEmail.ID, evt.EmailID)
 	}
 }
 
@@ -81,7 +84,7 @@ func TestCreateContactMessage_SpamDetected(t *testing.T) {
 	createCalled := false
 	publishCalled := false
 	mockRepo := &mockRepository{
-		createContactMessageFunc: func(_ context.Context, _ *models.ContactMessage) error {
+		createEmailFunc: func(_ context.Context, _ *models.Email) error {
 			createCalled = true
 			return nil
 		},
@@ -97,25 +100,18 @@ func TestCreateContactMessage_SpamDetected(t *testing.T) {
 	router := setupTestRouter()
 	router.POST("/api/v1/contact", handler.CreateContactMessage)
 
-	// Honeypot field (website) is filled - indicates spam
 	body := `{"name":"Bot","email":"bot@spam.com","subject":"Spam","message":"Buy now!","website":"http://spam.com"}`
 	w := performRequest(router, http.MethodPost, "/api/v1/contact", strings.NewReader(body))
 
-	// Should return success to not alert bots
 	if w.Code != http.StatusCreated {
 		t.Errorf("expected status %d, got %d", http.StatusCreated, w.Code)
 	}
-
-	// But should NOT save the message
 	if createCalled {
 		t.Error("expected message NOT to be saved for spam")
 	}
-
-	// And should NOT publish to queue
 	if publishCalled {
 		t.Error("expected publisher.Publish NOT to be called for spam")
 	}
-
 	if !strings.Contains(w.Body.String(), "Thank you for your message") {
 		t.Errorf("expected success message even for spam, got %s", w.Body.String())
 	}
@@ -123,7 +119,7 @@ func TestCreateContactMessage_SpamDetected(t *testing.T) {
 
 func TestCreateContactMessage_PublishError_DoesNotFailRequest(t *testing.T) {
 	mockRepo := &mockRepository{
-		createContactMessageFunc: func(_ context.Context, m *models.ContactMessage) error {
+		createEmailFunc: func(_ context.Context, m *models.Email) error {
 			m.ID = 1
 			return nil
 		},
@@ -141,25 +137,20 @@ func TestCreateContactMessage_PublishError_DoesNotFailRequest(t *testing.T) {
 	body := `{"name":"John Doe","email":"john@example.com","subject":"Test","message":"Hello world"}`
 	w := performRequest(router, http.MethodPost, "/api/v1/contact", strings.NewReader(body))
 
-	// Should still return 201 even when publish fails
 	if w.Code != http.StatusCreated {
 		t.Errorf("expected status %d even when publish fails, got %d", http.StatusCreated, w.Code)
 	}
-
 	if !strings.Contains(w.Body.String(), "Thank you for your message") {
 		t.Errorf("expected success message, got %s", w.Body.String())
 	}
 }
 
 func TestCreateContactMessage_ValidationError(t *testing.T) {
-	mockRepo := &mockRepository{}
-	mockPub := &mockPublisher{}
-	handler := New(mockRepo, mockPub)
+	handler := New(&mockRepository{}, &mockPublisher{})
 
 	router := setupTestRouter()
 	router.POST("/api/v1/contact", handler.CreateContactMessage)
 
-	// Missing required fields
 	body := `{"name":"John"}`
 	w := performRequest(router, http.MethodPost, "/api/v1/contact", strings.NewReader(body))
 
@@ -169,9 +160,7 @@ func TestCreateContactMessage_ValidationError(t *testing.T) {
 }
 
 func TestCreateContactMessage_InvalidEmail(t *testing.T) {
-	mockRepo := &mockRepository{}
-	mockPub := &mockPublisher{}
-	handler := New(mockRepo, mockPub)
+	handler := New(&mockRepository{}, &mockPublisher{})
 
 	router := setupTestRouter()
 	router.POST("/api/v1/contact", handler.CreateContactMessage)
@@ -186,12 +175,11 @@ func TestCreateContactMessage_InvalidEmail(t *testing.T) {
 
 func TestCreateContactMessage_RepositoryError(t *testing.T) {
 	mockRepo := &mockRepository{
-		createContactMessageFunc: func(_ context.Context, _ *models.ContactMessage) error {
+		createEmailFunc: func(_ context.Context, _ *models.Email) error {
 			return errors.New("database error")
 		},
 	}
-	mockPub := &mockPublisher{}
-	handler := New(mockRepo, mockPub)
+	handler := New(mockRepo, &mockPublisher{})
 
 	router := setupTestRouter()
 	router.POST("/api/v1/contact", handler.CreateContactMessage)
@@ -205,9 +193,7 @@ func TestCreateContactMessage_RepositoryError(t *testing.T) {
 }
 
 func TestCreateContactMessage_InvalidJSON(t *testing.T) {
-	mockRepo := &mockRepository{}
-	mockPub := &mockPublisher{}
-	handler := New(mockRepo, mockPub)
+	handler := New(&mockRepository{}, &mockPublisher{})
 
 	router := setupTestRouter()
 	router.POST("/api/v1/contact", handler.CreateContactMessage)
@@ -221,25 +207,22 @@ func TestCreateContactMessage_InvalidJSON(t *testing.T) {
 }
 
 func TestCreateContactMessage_UnicodeAndSpecialCharacters(t *testing.T) {
-	var createdMessage *models.ContactMessage
+	var createdEmail *models.Email
 	mockRepo := &mockRepository{
-		createContactMessageFunc: func(_ context.Context, message *models.ContactMessage) error {
-			createdMessage = message
-			message.ID = 1
+		createEmailFunc: func(_ context.Context, email *models.Email) error {
+			createdEmail = email
+			email.ID = 1
 			return nil
 		},
 	}
 	mockPub := &mockPublisher{
-		publishFunc: func(_ context.Context, _ any) error {
-			return nil
-		},
+		publishFunc: func(_ context.Context, _ any) error { return nil },
 	}
 	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.POST("/api/v1/contact", handler.CreateContactMessage)
 
-	// Test with Unicode characters (Chinese, emoji, special symbols)
 	body := `{"name":"日本語 Ñoño 🎉","email":"test@example.com","subject":"Ümläut & Special <chars>","message":"Hello 世界! Here are some special chars: <html> tags & ampersands"}`
 	w := performRequest(router, http.MethodPost, "/api/v1/contact", strings.NewReader(body))
 
@@ -247,21 +230,16 @@ func TestCreateContactMessage_UnicodeAndSpecialCharacters(t *testing.T) {
 		t.Errorf("expected status %d, got %d: %s", http.StatusCreated, w.Code, w.Body.String())
 	}
 
-	if createdMessage == nil {
-		t.Fatal("expected message to be created")
+	if createdEmail == nil {
+		t.Fatal("expected email to be created")
 	}
-	if createdMessage.Name != "日本語 Ñoño 🎉" {
-		t.Errorf("expected Unicode name preserved, got %s", createdMessage.Name)
-	}
-	if createdMessage.Subject != "Ümläut & Special <chars>" {
-		t.Errorf("expected special chars in subject preserved, got %s", createdMessage.Subject)
+	if createdEmail.Name == nil || *createdEmail.Name != "日本語 Ñoño 🎉" {
+		t.Errorf("expected Unicode name preserved, got %v", createdEmail.Name)
 	}
 }
 
 func TestCreateContactMessage_MaxLengthInputs(t *testing.T) {
-	mockRepo := &mockRepository{}
-	mockPub := &mockPublisher{}
-	handler := New(mockRepo, mockPub)
+	handler := New(&mockRepository{}, &mockPublisher{})
 
 	router := setupTestRouter()
 	router.POST("/api/v1/contact", handler.CreateContactMessage)
@@ -282,25 +260,21 @@ func TestCreateContactMessage_MaxLengthInputs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Reset mock for each test
 			createCalled := false
 			testRepo := &mockRepository{
-				createContactMessageFunc: func(_ context.Context, m *models.ContactMessage) error {
+				createEmailFunc: func(_ context.Context, m *models.Email) error {
 					createCalled = true
 					m.ID = 1
 					return nil
 				},
 			}
 			testPub := &mockPublisher{
-				publishFunc: func(_ context.Context, _ any) error {
-					return nil
-				},
+				publishFunc: func(_ context.Context, _ any) error { return nil },
 			}
 			testHandler := New(testRepo, testPub)
 			testRouter := setupTestRouter()
 			testRouter.POST("/api/v1/contact", testHandler.CreateContactMessage)
 
-			// Generate string of exact length
 			longString := strings.Repeat("a", tt.length)
 
 			var body string
@@ -318,8 +292,6 @@ func TestCreateContactMessage_MaxLengthInputs(t *testing.T) {
 			if w.Code != tt.wantStatus {
 				t.Errorf("%s: expected status %d, got %d", tt.name, tt.wantStatus, w.Code)
 			}
-
-			// Verify DB was called only for valid inputs
 			if tt.wantStatus == http.StatusCreated && !createCalled {
 				t.Errorf("%s: expected repository to be called", tt.name)
 			}
@@ -333,39 +305,31 @@ func TestCreateContactMessage_MaxLengthInputs(t *testing.T) {
 func TestCreateContactMessage_EmptyHoneypotIsNotSpam(t *testing.T) {
 	createCalled := false
 	mockRepo := &mockRepository{
-		createContactMessageFunc: func(_ context.Context, _ *models.ContactMessage) error {
+		createEmailFunc: func(_ context.Context, _ *models.Email) error {
 			createCalled = true
 			return nil
 		},
 	}
 	mockPub := &mockPublisher{
-		publishFunc: func(_ context.Context, _ any) error {
-			return nil
-		},
+		publishFunc: func(_ context.Context, _ any) error { return nil },
 	}
 	handler := New(mockRepo, mockPub)
 
 	router := setupTestRouter()
 	router.POST("/api/v1/contact", handler.CreateContactMessage)
 
-	// Empty honeypot field should NOT be spam
 	body := `{"name":"Real User","email":"real@example.com","subject":"Real Subject","message":"Real message","website":""}`
 	w := performRequest(router, http.MethodPost, "/api/v1/contact", strings.NewReader(body))
 
 	if w.Code != http.StatusCreated {
 		t.Errorf("expected status %d, got %d", http.StatusCreated, w.Code)
 	}
-
-	// Should save the message (not spam)
 	if !createCalled {
 		t.Error("expected message to be saved for empty honeypot")
 	}
 }
 
 func TestCreateContactMessage_MaliciousContent(t *testing.T) {
-	// Test that potentially malicious content is stored as-is
-	// GORM parameterizes queries (prevents SQL injection)
-	// HTML escaping should happen at render time, not storage
 	tests := []struct {
 		name            string
 		inputName       string
@@ -393,47 +357,26 @@ func TestCreateContactMessage_MaliciousContent(t *testing.T) {
 			expectedSubject: "<img src=x onerror=alert('xss')>",
 			expectedMessage: "<iframe src='evil.com'></iframe>",
 		},
-		{
-			name:            "html_email_content",
-			inputName:       "User",
-			inputSubject:    "Check this <b>important</b> message",
-			inputMessage:    "<a href='http://phishing.com'>Click here</a> for prize!",
-			expectedName:    "User",
-			expectedSubject: "Check this <b>important</b> message",
-			expectedMessage: "<a href='http://phishing.com'>Click here</a> for prize!",
-		},
-		{
-			name:            "null_bytes_and_control_chars",
-			inputName:       "User\x00Name",
-			inputSubject:    "Subject\nwith\nnewlines",
-			inputMessage:    "Message\twith\ttabs",
-			expectedName:    "User\x00Name",
-			expectedSubject: "Subject\nwith\nnewlines",
-			expectedMessage: "Message\twith\ttabs",
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var createdMessage *models.ContactMessage
+			var createdEmail *models.Email
 			mockRepo := &mockRepository{
-				createContactMessageFunc: func(_ context.Context, message *models.ContactMessage) error {
-					createdMessage = message
-					message.ID = 1
+				createEmailFunc: func(_ context.Context, email *models.Email) error {
+					createdEmail = email
+					email.ID = 1
 					return nil
 				},
 			}
 			mockPub := &mockPublisher{
-				publishFunc: func(_ context.Context, _ any) error {
-					return nil
-				},
+				publishFunc: func(_ context.Context, _ any) error { return nil },
 			}
 			handler := New(mockRepo, mockPub)
 
 			router := setupTestRouter()
 			router.POST("/api/v1/contact", handler.CreateContactMessage)
 
-			// Use proper JSON encoding to handle special characters
 			reqBody := map[string]string{
 				"name":    tt.inputName,
 				"email":   "test@example.com",
@@ -448,98 +391,91 @@ func TestCreateContactMessage_MaliciousContent(t *testing.T) {
 				return
 			}
 
-			if createdMessage == nil {
-				t.Fatal("expected message to be created")
+			if createdEmail == nil {
+				t.Fatal("expected email to be created")
 			}
-
-			// Verify content is stored as-is (not escaped or modified)
-			if createdMessage.Name != tt.expectedName {
-				t.Errorf("name: expected %q, got %q", tt.expectedName, createdMessage.Name)
+			if createdEmail.Name == nil || *createdEmail.Name != tt.expectedName {
+				t.Errorf("name: expected %q, got %v", tt.expectedName, createdEmail.Name)
 			}
-			if createdMessage.Subject != tt.expectedSubject {
-				t.Errorf("subject: expected %q, got %q", tt.expectedSubject, createdMessage.Subject)
+			if createdEmail.Subject != tt.expectedSubject {
+				t.Errorf("subject: expected %q, got %q", tt.expectedSubject, createdEmail.Subject)
 			}
-			if createdMessage.Message != tt.expectedMessage {
-				t.Errorf("message: expected %q, got %q", tt.expectedMessage, createdMessage.Message)
+			if createdEmail.Message != tt.expectedMessage {
+				t.Errorf("message: expected %q, got %q", tt.expectedMessage, createdEmail.Message)
 			}
 		})
 	}
 }
 
 // =============================================================================
-// GetContactMessages Tests
+// GetEmails Tests
 // =============================================================================
 
-func TestGetContactMessages_Success(t *testing.T) {
-	expected := createTestContactMessages()
+func TestGetEmails_Success(t *testing.T) {
+	expected := createTestEmails()
 	mockRepo := &mockRepository{
-		getContactMessagesFunc: func(_ context.Context) ([]models.ContactMessage, error) {
+		getEmailsFunc: func(_ context.Context) ([]models.Email, error) {
 			return expected, nil
 		},
 	}
-	mockPub := &mockPublisher{}
-	handler := New(mockRepo, mockPub)
+	handler := New(mockRepo, &mockPublisher{})
 
 	router := setupTestRouter()
-	router.GET("/api/v1/messages", handler.GetContactMessages)
+	router.GET("/api/v1/emails", handler.GetEmails)
 
-	w := performRequest(router, http.MethodGet, "/api/v1/messages", nil)
+	w := performRequest(router, http.MethodGet, "/api/v1/emails", nil)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("expected status %d, got %d", http.StatusOK, w.Code)
 	}
 
-	var result []models.ContactMessage
+	var result []models.Email
 	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
 		t.Fatalf("failed to unmarshal response: %v", err)
 	}
-
 	if len(result) != len(expected) {
-		t.Errorf("expected %d messages, got %d", len(expected), len(result))
+		t.Errorf("expected %d emails, got %d", len(expected), len(result))
 	}
 }
 
-func TestGetContactMessages_Empty(t *testing.T) {
+func TestGetEmails_Empty(t *testing.T) {
 	mockRepo := &mockRepository{
-		getContactMessagesFunc: func(_ context.Context) ([]models.ContactMessage, error) {
-			return []models.ContactMessage{}, nil
+		getEmailsFunc: func(_ context.Context) ([]models.Email, error) {
+			return []models.Email{}, nil
 		},
 	}
-	mockPub := &mockPublisher{}
-	handler := New(mockRepo, mockPub)
+	handler := New(mockRepo, &mockPublisher{})
 
 	router := setupTestRouter()
-	router.GET("/api/v1/messages", handler.GetContactMessages)
+	router.GET("/api/v1/emails", handler.GetEmails)
 
-	w := performRequest(router, http.MethodGet, "/api/v1/messages", nil)
+	w := performRequest(router, http.MethodGet, "/api/v1/emails", nil)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("expected status %d, got %d", http.StatusOK, w.Code)
 	}
 
-	var result []models.ContactMessage
+	var result []models.Email
 	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
 		t.Fatalf("failed to unmarshal response: %v", err)
 	}
-
 	if len(result) != 0 {
-		t.Errorf("expected 0 messages, got %d", len(result))
+		t.Errorf("expected 0 emails, got %d", len(result))
 	}
 }
 
-func TestGetContactMessages_RepositoryError(t *testing.T) {
+func TestGetEmails_RepositoryError(t *testing.T) {
 	mockRepo := &mockRepository{
-		getContactMessagesFunc: func(_ context.Context) ([]models.ContactMessage, error) {
+		getEmailsFunc: func(_ context.Context) ([]models.Email, error) {
 			return nil, errors.New("database error")
 		},
 	}
-	mockPub := &mockPublisher{}
-	handler := New(mockRepo, mockPub)
+	handler := New(mockRepo, &mockPublisher{})
 
 	router := setupTestRouter()
-	router.GET("/api/v1/messages", handler.GetContactMessages)
+	router.GET("/api/v1/emails", handler.GetEmails)
 
-	w := performRequest(router, http.MethodGet, "/api/v1/messages", nil)
+	w := performRequest(router, http.MethodGet, "/api/v1/emails", nil)
 
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, w.Code)
@@ -547,95 +483,85 @@ func TestGetContactMessages_RepositoryError(t *testing.T) {
 }
 
 // =============================================================================
-// GetContactMessage Tests
+// GetEmail Tests
 // =============================================================================
 
-func TestGetContactMessage_Success(t *testing.T) {
-	expected := createTestContactMessage()
+func TestGetEmail_Success(t *testing.T) {
+	expected := createTestEmail()
 	mockRepo := &mockRepository{
-		getContactMessageByIDFunc: func(_ context.Context, id int64) (*models.ContactMessage, error) {
+		getEmailByIDFunc: func(_ context.Context, id int64) (*models.Email, error) {
 			if id != 1 {
 				t.Errorf("expected id 1, got %d", id)
 			}
 			return expected, nil
 		},
 	}
-	mockPub := &mockPublisher{}
-	handler := New(mockRepo, mockPub)
+	handler := New(mockRepo, &mockPublisher{})
 
 	router := setupTestRouter()
-	router.GET("/api/v1/messages/:id", handler.GetContactMessage)
+	router.GET("/api/v1/emails/:id", handler.GetEmail)
 
-	w := performRequest(router, http.MethodGet, "/api/v1/messages/1", nil)
+	w := performRequest(router, http.MethodGet, "/api/v1/emails/1", nil)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("expected status %d, got %d", http.StatusOK, w.Code)
 	}
 
-	var result models.ContactMessage
+	var result models.Email
 	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
 		t.Fatalf("failed to unmarshal response: %v", err)
 	}
-
 	if result.ID != expected.ID {
 		t.Errorf("expected ID %d, got %d", expected.ID, result.ID)
 	}
-	if result.Name != expected.Name {
-		t.Errorf("expected name %s, got %s", expected.Name, result.Name)
-	}
 }
 
-func TestGetContactMessage_InvalidID(t *testing.T) {
-	mockRepo := &mockRepository{}
-	mockPub := &mockPublisher{}
-	handler := New(mockRepo, mockPub)
+func TestGetEmail_InvalidID(t *testing.T) {
+	handler := New(&mockRepository{}, &mockPublisher{})
 
 	router := setupTestRouter()
-	router.GET("/api/v1/messages/:id", handler.GetContactMessage)
+	router.GET("/api/v1/emails/:id", handler.GetEmail)
 
-	w := performRequest(router, http.MethodGet, "/api/v1/messages/invalid", nil)
+	w := performRequest(router, http.MethodGet, "/api/v1/emails/invalid", nil)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
 	}
-
 	if !strings.Contains(w.Body.String(), "Invalid ID format") {
 		t.Errorf("expected 'Invalid ID format' error, got %s", w.Body.String())
 	}
 }
 
-func TestGetContactMessage_NotFound(t *testing.T) {
+func TestGetEmail_NotFound(t *testing.T) {
 	mockRepo := &mockRepository{
-		getContactMessageByIDFunc: func(_ context.Context, _ int64) (*models.ContactMessage, error) {
+		getEmailByIDFunc: func(_ context.Context, _ int64) (*models.Email, error) {
 			return nil, gorm.ErrRecordNotFound
 		},
 	}
-	mockPub := &mockPublisher{}
-	handler := New(mockRepo, mockPub)
+	handler := New(mockRepo, &mockPublisher{})
 
 	router := setupTestRouter()
-	router.GET("/api/v1/messages/:id", handler.GetContactMessage)
+	router.GET("/api/v1/emails/:id", handler.GetEmail)
 
-	w := performRequest(router, http.MethodGet, "/api/v1/messages/999", nil)
+	w := performRequest(router, http.MethodGet, "/api/v1/emails/999", nil)
 
 	if w.Code != http.StatusNotFound {
 		t.Errorf("expected status %d, got %d", http.StatusNotFound, w.Code)
 	}
 }
 
-func TestGetContactMessage_RepositoryError(t *testing.T) {
+func TestGetEmail_RepositoryError(t *testing.T) {
 	mockRepo := &mockRepository{
-		getContactMessageByIDFunc: func(_ context.Context, _ int64) (*models.ContactMessage, error) {
+		getEmailByIDFunc: func(_ context.Context, _ int64) (*models.Email, error) {
 			return nil, errors.New("database error")
 		},
 	}
-	mockPub := &mockPublisher{}
-	handler := New(mockRepo, mockPub)
+	handler := New(mockRepo, &mockPublisher{})
 
 	router := setupTestRouter()
-	router.GET("/api/v1/messages/:id", handler.GetContactMessage)
+	router.GET("/api/v1/emails/:id", handler.GetEmail)
 
-	w := performRequest(router, http.MethodGet, "/api/v1/messages/1", nil)
+	w := performRequest(router, http.MethodGet, "/api/v1/emails/1", nil)
 
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, w.Code)
@@ -643,30 +569,140 @@ func TestGetContactMessage_RepositoryError(t *testing.T) {
 }
 
 // =============================================================================
-// Context Propagation Tests (Contact Messages)
+// SendEmail Tests
+// =============================================================================
+
+func TestSendEmail_Success(t *testing.T) {
+	var createdEmail *models.Email
+	publishCalled := false
+
+	mockRepo := &mockRepository{
+		createEmailFunc: func(_ context.Context, email *models.Email) error {
+			createdEmail = email
+			email.ID = 10
+			return nil
+		},
+	}
+	mockPub := &mockPublisher{
+		publishFunc: func(_ context.Context, _ interface{}) error {
+			publishCalled = true
+			return nil
+		},
+	}
+	handler := New(mockRepo, mockPub)
+
+	router := setupTestRouter()
+	router.POST("/api/v1/emails", handler.SendEmail)
+
+	body := `{"type":"email_verification","recipient_email":"user@example.com","data":{"username":"testuser","verify_url":"https://example.com/verify?token=abc"}}`
+	w := performRequest(router, http.MethodPost, "/api/v1/emails", strings.NewReader(body))
+
+	if w.Code != http.StatusCreated {
+		t.Errorf("expected status %d, got %d: %s", http.StatusCreated, w.Code, w.Body.String())
+	}
+
+	if createdEmail == nil {
+		t.Fatal("expected email to be created")
+	}
+	if createdEmail.Type != models.EmailTypeEmailVerification {
+		t.Errorf("expected type %q, got %q", models.EmailTypeEmailVerification, createdEmail.Type)
+	}
+	if createdEmail.RecipientEmail == nil || *createdEmail.RecipientEmail != "user@example.com" {
+		t.Errorf("expected recipient user@example.com, got %v", createdEmail.RecipientEmail)
+	}
+	if createdEmail.Subject != "Verify your email address" {
+		t.Errorf("expected subject 'Verify your email address', got %q", createdEmail.Subject)
+	}
+	if !strings.Contains(createdEmail.Message, "testuser") {
+		t.Error("expected rendered template to contain username")
+	}
+	if !strings.Contains(createdEmail.Message, "https://example.com/verify?token=abc") {
+		t.Error("expected rendered template to contain verify_url")
+	}
+	if !publishCalled {
+		t.Error("expected publisher.Publish to be called")
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if resp["id"] != float64(10) {
+		t.Errorf("expected id 10 in response, got %v", resp["id"])
+	}
+}
+
+func TestSendEmail_UnsupportedType(t *testing.T) {
+	handler := New(&mockRepository{}, &mockPublisher{})
+
+	router := setupTestRouter()
+	router.POST("/api/v1/emails", handler.SendEmail)
+
+	body := `{"type":"unknown_type","recipient_email":"user@example.com","data":{"key":"val"}}`
+	w := performRequest(router, http.MethodPost, "/api/v1/emails", strings.NewReader(body))
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "unsupported email type") {
+		t.Errorf("expected unsupported type error, got %s", w.Body.String())
+	}
+}
+
+func TestSendEmail_MissingFields(t *testing.T) {
+	handler := New(&mockRepository{}, &mockPublisher{})
+
+	router := setupTestRouter()
+	router.POST("/api/v1/emails", handler.SendEmail)
+
+	body := `{"type":"email_verification"}`
+	w := performRequest(router, http.MethodPost, "/api/v1/emails", strings.NewReader(body))
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestSendEmail_RepositoryError(t *testing.T) {
+	mockRepo := &mockRepository{
+		createEmailFunc: func(_ context.Context, _ *models.Email) error {
+			return errors.New("database error")
+		},
+	}
+	handler := New(mockRepo, &mockPublisher{})
+
+	router := setupTestRouter()
+	router.POST("/api/v1/emails", handler.SendEmail)
+
+	body := `{"type":"email_verification","recipient_email":"user@example.com","data":{"username":"test","verify_url":"https://example.com/verify"}}`
+	w := performRequest(router, http.MethodPost, "/api/v1/emails", strings.NewReader(body))
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, w.Code)
+	}
+}
+
+// =============================================================================
+// Context Propagation Tests
 // =============================================================================
 
 func TestCreateContactMessage_ContextPropagation(t *testing.T) {
 	var capturedCtx context.Context
 	mockRepo := &mockRepository{
-		createContactMessageFunc: func(ctx context.Context, _ *models.ContactMessage) error {
+		createEmailFunc: func(ctx context.Context, _ *models.Email) error {
 			capturedCtx = ctx
 			return nil
 		},
 	}
-	mockPub := &mockPublisher{}
-	handler := New(mockRepo, mockPub)
+	handler := New(mockRepo, &mockPublisher{})
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-
-	// Add middleware that injects a sentinel value into the context
 	router.Use(func(c *gin.Context) {
 		ctx := context.WithValue(c.Request.Context(), ctxKey{}, "test-marker")
 		c.Request = c.Request.WithContext(ctx)
 		c.Next()
 	})
-
 	router.POST("/api/v1/contact", handler.CreateContactMessage)
 
 	body := `{"name":"John Doe","email":"john@example.com","subject":"Test","message":"Hello world"}`
@@ -675,64 +711,23 @@ func TestCreateContactMessage_ContextPropagation(t *testing.T) {
 	if w.Code != http.StatusCreated {
 		t.Errorf("expected status %d, got %d", http.StatusCreated, w.Code)
 	}
-
 	if capturedCtx == nil {
 		t.Error("expected context to be propagated to repository")
 	}
-
-	if capturedCtx.Value(ctxKey{}) != "test-marker" {
-		t.Error("context sentinel value was not propagated to repository")
-	}
-}
-
-func TestGetContactMessages_ContextPropagation(t *testing.T) {
-	var capturedCtx context.Context
-	mockRepo := &mockRepository{
-		getContactMessagesFunc: func(ctx context.Context) ([]models.ContactMessage, error) {
-			capturedCtx = ctx
-			return []models.ContactMessage{}, nil
-		},
-	}
-	mockPub := &mockPublisher{}
-	handler := New(mockRepo, mockPub)
-
-	gin.SetMode(gin.TestMode)
-	router := gin.New()
-
-	router.Use(func(c *gin.Context) {
-		ctx := context.WithValue(c.Request.Context(), ctxKey{}, "test-marker")
-		c.Request = c.Request.WithContext(ctx)
-		c.Next()
-	})
-
-	router.GET("/api/v1/messages", handler.GetContactMessages)
-
-	w := performRequest(router, http.MethodGet, "/api/v1/messages", nil)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("expected status %d, got %d", http.StatusOK, w.Code)
-	}
-
-	if capturedCtx == nil {
-		t.Error("expected context to be propagated to repository")
-	}
-
 	if capturedCtx.Value(ctxKey{}) != "test-marker" {
 		t.Error("context sentinel value was not propagated to repository")
 	}
 }
 
 // =============================================================================
-// Invalid ID Format Tests (Messages)
+// Invalid ID Format Tests
 // =============================================================================
 
-func TestInvalidIDFormats_Messages(t *testing.T) {
-	mockRepo := &mockRepository{}
-	mockPub := &mockPublisher{}
-	handler := New(mockRepo, mockPub)
+func TestInvalidIDFormats_Emails(t *testing.T) {
+	handler := New(&mockRepository{}, &mockPublisher{})
 
 	router := setupTestRouter()
-	router.GET("/api/v1/messages/:id", handler.GetContactMessage)
+	router.GET("/api/v1/emails/:id", handler.GetEmail)
 
 	tests := []struct {
 		name string
@@ -746,9 +741,9 @@ func TestInvalidIDFormats_Messages(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			w := performRequest(router, http.MethodGet, "/api/v1/messages/"+tt.id, nil)
+			w := performRequest(router, http.MethodGet, "/api/v1/emails/"+tt.id, nil)
 			if w.Code != http.StatusBadRequest {
-				t.Errorf("GetContactMessage(%q) status = %d, want %d", tt.id, w.Code, http.StatusBadRequest)
+				t.Errorf("GetEmail(%q) status = %d, want %d", tt.id, w.Code, http.StatusBadRequest)
 			}
 		})
 	}

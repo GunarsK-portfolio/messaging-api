@@ -55,11 +55,19 @@ func Setup(router *gin.Engine, handler *handlers.Handler, cfg *config.Config, me
 	protected.Use(authMiddleware.ValidateToken())
 	protected.Use(authMiddleware.AddTTLHeader())
 	{
-		// Contact messages (read-only for admin)
+		// Emails (S2S: create, admin: list/get)
+		emails := protected.Group("/emails")
+		{
+			emails.POST("", common.RequirePermission(common.ResourceEmails, common.LevelEdit), handler.SendEmail)
+			emails.GET("", common.RequirePermission(common.ResourceEmails, common.LevelRead), handler.GetEmails)
+			emails.GET("/:id", common.RequirePermission(common.ResourceEmails, common.LevelRead), handler.GetEmail)
+		}
+
+		// Legacy messages route (backward compat, same data)
 		messages := protected.Group("/messages")
 		{
-			messages.GET("", common.RequirePermission(common.ResourceMessages, common.LevelRead), handler.GetContactMessages)
-			messages.GET("/:id", common.RequirePermission(common.ResourceMessages, common.LevelRead), handler.GetContactMessage)
+			messages.GET("", common.RequirePermission(common.ResourceMessages, common.LevelRead), handler.GetEmails)
+			messages.GET("/:id", common.RequirePermission(common.ResourceMessages, common.LevelRead), handler.GetEmail)
 		}
 
 		// Recipients management (full CRUD for admin)

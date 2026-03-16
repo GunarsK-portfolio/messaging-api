@@ -10,11 +10,11 @@ import (
 
 // Repository defines the interface for messaging data operations
 type Repository interface {
-	// Contact Messages (public: create only, admin: list/get)
-	CreateContactMessage(ctx context.Context, message *models.ContactMessage) error
-	GetContactMessages(ctx context.Context) ([]models.ContactMessage, error)
-	GetContactMessageByID(ctx context.Context, id int64) (*models.ContactMessage, error)
-	UpdateContactMessageStatus(ctx context.Context, id int64, status string, lastError *string) error
+	// Emails (contact form: create, admin: list/get, S2S: create typed emails)
+	CreateEmail(ctx context.Context, email *models.Email) error
+	GetEmails(ctx context.Context) ([]models.Email, error)
+	GetEmailByID(ctx context.Context, id int64) (*models.Email, error)
+	UpdateEmailStatus(ctx context.Context, id int64, status string, lastError *string) error
 
 	// Recipients (admin only)
 	GetAllRecipients(ctx context.Context) ([]models.Recipient, error)
