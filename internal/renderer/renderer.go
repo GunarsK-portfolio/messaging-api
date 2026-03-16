@@ -20,6 +20,10 @@ var typeRegistry = map[string]emailTypeMeta{
 		Subject:      "Verify your email address",
 		RequiredKeys: []string{"username", "verify_url"},
 	},
+	models.EmailTypePasswordReset: {
+		Subject:      "Reset your password",
+		RequiredKeys: []string{"username", "reset_url"},
+	},
 }
 
 // parsed templates, loaded once at init
