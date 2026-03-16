@@ -23,42 +23,42 @@ func init() {
 // =============================================================================
 
 type mockRepository struct {
-	createContactMessageFunc       func(ctx context.Context, message *models.ContactMessage) error
-	getContactMessagesFunc         func(ctx context.Context) ([]models.ContactMessage, error)
-	getContactMessageByIDFunc      func(ctx context.Context, id int64) (*models.ContactMessage, error)
-	updateContactMessageStatusFunc func(ctx context.Context, id int64, status string, lastError *string) error
-	getAllRecipientsFunc           func(ctx context.Context) ([]models.Recipient, error)
-	getActiveRecipientsFunc        func(ctx context.Context) ([]models.Recipient, error)
-	getRecipientByIDFunc           func(ctx context.Context, id int64) (*models.Recipient, error)
-	createRecipientFunc            func(ctx context.Context, recipient *models.Recipient) error
-	updateRecipientFunc            func(ctx context.Context, recipient *models.Recipient) error
-	deleteRecipientFunc            func(ctx context.Context, id int64) error
+	createEmailFunc         func(ctx context.Context, email *models.Email) error
+	getEmailsFunc           func(ctx context.Context) ([]models.Email, error)
+	getEmailByIDFunc        func(ctx context.Context, id int64) (*models.Email, error)
+	updateEmailStatusFunc   func(ctx context.Context, id int64, status string, lastError *string) error
+	getAllRecipientsFunc    func(ctx context.Context) ([]models.Recipient, error)
+	getActiveRecipientsFunc func(ctx context.Context) ([]models.Recipient, error)
+	getRecipientByIDFunc    func(ctx context.Context, id int64) (*models.Recipient, error)
+	createRecipientFunc     func(ctx context.Context, recipient *models.Recipient) error
+	updateRecipientFunc     func(ctx context.Context, recipient *models.Recipient) error
+	deleteRecipientFunc     func(ctx context.Context, id int64) error
 }
 
-func (m *mockRepository) CreateContactMessage(ctx context.Context, message *models.ContactMessage) error {
-	if m.createContactMessageFunc != nil {
-		return m.createContactMessageFunc(ctx, message)
+func (m *mockRepository) CreateEmail(ctx context.Context, email *models.Email) error {
+	if m.createEmailFunc != nil {
+		return m.createEmailFunc(ctx, email)
 	}
 	return nil
 }
 
-func (m *mockRepository) GetContactMessages(ctx context.Context) ([]models.ContactMessage, error) {
-	if m.getContactMessagesFunc != nil {
-		return m.getContactMessagesFunc(ctx)
+func (m *mockRepository) GetEmails(ctx context.Context) ([]models.Email, error) {
+	if m.getEmailsFunc != nil {
+		return m.getEmailsFunc(ctx)
 	}
-	return []models.ContactMessage{}, nil
+	return []models.Email{}, nil
 }
 
-func (m *mockRepository) GetContactMessageByID(ctx context.Context, id int64) (*models.ContactMessage, error) {
-	if m.getContactMessageByIDFunc != nil {
-		return m.getContactMessageByIDFunc(ctx, id)
+func (m *mockRepository) GetEmailByID(ctx context.Context, id int64) (*models.Email, error) {
+	if m.getEmailByIDFunc != nil {
+		return m.getEmailByIDFunc(ctx, id)
 	}
-	return &models.ContactMessage{ID: id}, nil
+	return &models.Email{ID: id}, nil
 }
 
-func (m *mockRepository) UpdateContactMessageStatus(ctx context.Context, id int64, status string, lastError *string) error {
-	if m.updateContactMessageStatusFunc != nil {
-		return m.updateContactMessageStatusFunc(ctx, id, status, lastError)
+func (m *mockRepository) UpdateEmailStatus(ctx context.Context, id int64, status string, lastError *string) error {
+	if m.updateEmailStatusFunc != nil {
+		return m.updateEmailStatusFunc(ctx, id, status, lastError)
 	}
 	return nil
 }
@@ -111,15 +111,15 @@ func (m *mockRepository) DeleteRecipient(ctx context.Context, id int64) error {
 
 type mockPublisher struct{}
 
-func (m *mockPublisher) Publish(ctx context.Context, message interface{}) error {
+func (m *mockPublisher) Publish(_ context.Context, _ interface{}) error {
 	return nil
 }
 
-func (m *mockPublisher) PublishToRetry(ctx context.Context, retryIndex int, body []byte, correlationId string, headers amqp.Table) error {
+func (m *mockPublisher) PublishToRetry(_ context.Context, _ int, _ []byte, _ string, _ amqp.Table) error {
 	return nil
 }
 
-func (m *mockPublisher) PublishToDLQ(ctx context.Context, body []byte, correlationId string) error {
+func (m *mockPublisher) PublishToDLQ(_ context.Context, _ []byte, _ string) error {
 	return nil
 }
 
@@ -151,11 +151,19 @@ func setupRouterWithScopes(t *testing.T, scopes map[string]string) *gin.Engine {
 	v1 := router.Group("/api/v1")
 	v1.Use(injectScopes(scopes))
 	{
-		// Messages (read-only)
+		// Emails
+		emails := v1.Group("/emails")
+		{
+			emails.POST("", common.RequirePermission(common.ResourceEmails, common.LevelEdit), handler.SendEmail)
+			emails.GET("", common.RequirePermission(common.ResourceEmails, common.LevelRead), handler.GetEmails)
+			emails.GET("/:id", common.RequirePermission(common.ResourceEmails, common.LevelRead), handler.GetEmail)
+		}
+
+		// Legacy messages route
 		messages := v1.Group("/messages")
 		{
-			messages.GET("", common.RequirePermission(common.ResourceMessages, common.LevelRead), handler.GetContactMessages)
-			messages.GET("/:id", common.RequirePermission(common.ResourceMessages, common.LevelRead), handler.GetContactMessage)
+			messages.GET("", common.RequirePermission(common.ResourceMessages, common.LevelRead), handler.GetEmails)
+			messages.GET("/:id", common.RequirePermission(common.ResourceMessages, common.LevelRead), handler.GetEmail)
 		}
 
 		// Recipients (full CRUD)
@@ -194,6 +202,11 @@ type routePermission struct {
 	level    string
 }
 
+var emailsRoutes = []routePermission{
+	{"GET", "/api/v1/emails", common.ResourceEmails, common.LevelRead},
+	{"GET", "/api/v1/emails/1", common.ResourceEmails, common.LevelRead},
+}
+
 var messagesRoutes = []routePermission{
 	{"GET", "/api/v1/messages", common.ResourceMessages, common.LevelRead},
 	{"GET", "/api/v1/messages/1", common.ResourceMessages, common.LevelRead},
@@ -208,11 +221,11 @@ var recipientsRoutes = []routePermission{
 }
 
 // =============================================================================
-// Messages Route Permission Tests
+// Emails Route Permission Tests
 // =============================================================================
 
-func TestMessagesRoutes_Forbidden_WithoutPermission(t *testing.T) {
-	for _, route := range messagesRoutes {
+func TestEmailsRoutes_Forbidden_WithoutPermission(t *testing.T) {
+	for _, route := range emailsRoutes {
 		t.Run(route.method+" "+route.path, func(t *testing.T) {
 			router := setupRouterWithScopes(t, map[string]string{})
 			w := performRequest(t, router, route.method, route.path)
@@ -235,6 +248,40 @@ func TestMessagesRoutes_Forbidden_WithoutPermission(t *testing.T) {
 	}
 }
 
+func TestEmailsRoutes_Allowed_WithPermission(t *testing.T) {
+	for _, route := range emailsRoutes {
+		t.Run(route.method+" "+route.path, func(t *testing.T) {
+			scopes := map[string]string{route.resource: route.level}
+			router := setupRouterWithScopes(t, scopes)
+			w := performRequest(t, router, route.method, route.path)
+
+			if w.Code == http.StatusForbidden {
+				t.Errorf("got 403 Forbidden with permission %s:%s", route.resource, route.level)
+			}
+			if w.Code == http.StatusUnauthorized {
+				t.Errorf("got 401 Unauthorized - scopes not injected")
+			}
+		})
+	}
+}
+
+// =============================================================================
+// Legacy Messages Route Permission Tests
+// =============================================================================
+
+func TestMessagesRoutes_Forbidden_WithoutPermission(t *testing.T) {
+	for _, route := range messagesRoutes {
+		t.Run(route.method+" "+route.path, func(t *testing.T) {
+			router := setupRouterWithScopes(t, map[string]string{})
+			w := performRequest(t, router, route.method, route.path)
+
+			if w.Code != http.StatusForbidden {
+				t.Errorf("status = %d, want %d", w.Code, http.StatusForbidden)
+			}
+		})
+	}
+}
+
 func TestMessagesRoutes_Allowed_WithPermission(t *testing.T) {
 	for _, route := range messagesRoutes {
 		t.Run(route.method+" "+route.path, func(t *testing.T) {
@@ -242,13 +289,8 @@ func TestMessagesRoutes_Allowed_WithPermission(t *testing.T) {
 			router := setupRouterWithScopes(t, scopes)
 			w := performRequest(t, router, route.method, route.path)
 
-			// We only verify authorization passes (not 403/401).
-			// Handler may return 400/404/500 due to missing body or mock defaults.
 			if w.Code == http.StatusForbidden {
 				t.Errorf("got 403 Forbidden with permission %s:%s", route.resource, route.level)
-			}
-			if w.Code == http.StatusUnauthorized {
-				t.Errorf("got 401 Unauthorized - scopes not injected")
 			}
 		})
 	}
@@ -278,8 +320,6 @@ func TestRecipientsRoutes_Allowed_WithPermission(t *testing.T) {
 			router := setupRouterWithScopes(t, scopes)
 			w := performRequest(t, router, route.method, route.path)
 
-			// We only verify authorization passes (not 403/401).
-			// Handler may return 400/404/500 due to missing body or mock defaults.
 			if w.Code == http.StatusForbidden {
 				t.Errorf("got 403 Forbidden with permission %s:%s", route.resource, route.level)
 			}
@@ -311,7 +351,10 @@ func TestPermissionHierarchy(t *testing.T) {
 		{"read grants read", common.ResourceRecipients, common.LevelRead, common.LevelRead, "GET", "/api/v1/recipients", true},
 		{"read denies edit", common.ResourceRecipients, common.LevelRead, common.LevelEdit, "POST", "/api/v1/recipients", false},
 		{"none denies read", common.ResourceRecipients, common.LevelNone, common.LevelRead, "GET", "/api/v1/recipients", false},
-		// Messages hierarchy (read-only resource)
+		// Emails hierarchy
+		{"emails read grants read", common.ResourceEmails, common.LevelRead, common.LevelRead, "GET", "/api/v1/emails", true},
+		{"emails delete grants read", common.ResourceEmails, common.LevelDelete, common.LevelRead, "GET", "/api/v1/emails", true},
+		// Legacy messages
 		{"messages read grants read", common.ResourceMessages, common.LevelRead, common.LevelRead, "GET", "/api/v1/messages", true},
 		{"messages delete grants read", common.ResourceMessages, common.LevelDelete, common.LevelRead, "GET", "/api/v1/messages", true},
 	}
@@ -336,14 +379,13 @@ func TestPermissionHierarchy(t *testing.T) {
 // =============================================================================
 
 func TestCrossResourcePermissions_Denied(t *testing.T) {
-	// Messages permission should NOT grant recipients access
-	scopes := map[string]string{common.ResourceMessages: common.LevelDelete}
+	scopes := map[string]string{common.ResourceEmails: common.LevelDelete}
 	router := setupRouterWithScopes(t, scopes)
 
 	w := performRequest(t, router, "GET", "/api/v1/recipients")
 
 	if w.Code != http.StatusForbidden {
-		t.Errorf("messages:delete should not grant recipients:read, got status %d", w.Code)
+		t.Errorf("emails:delete should not grant recipients:read, got status %d", w.Code)
 	}
 }
 
@@ -355,13 +397,12 @@ func TestRoutes_NoScopes_Unauthorized(t *testing.T) {
 	router := gin.New()
 	handler := handlers.New(&mockRepository{}, &mockPublisher{})
 
-	// Route without scope injection middleware
-	router.GET("/api/v1/messages",
-		common.RequirePermission(common.ResourceMessages, common.LevelRead),
-		handler.GetContactMessages,
+	router.GET("/api/v1/emails",
+		common.RequirePermission(common.ResourceEmails, common.LevelRead),
+		handler.GetEmails,
 	)
 
-	req, _ := http.NewRequest("GET", "/api/v1/messages", nil)
+	req, _ := http.NewRequest("GET", "/api/v1/emails", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -374,18 +415,17 @@ func TestRoutes_InvalidScopesFormat_InternalError(t *testing.T) {
 	router := gin.New()
 	handler := handlers.New(&mockRepository{}, &mockPublisher{})
 
-	// Inject invalid scopes format
 	router.Use(func(c *gin.Context) {
 		c.Set("scopes", "invalid-format")
 		c.Next()
 	})
 
-	router.GET("/api/v1/messages",
-		common.RequirePermission(common.ResourceMessages, common.LevelRead),
-		handler.GetContactMessages,
+	router.GET("/api/v1/emails",
+		common.RequirePermission(common.ResourceEmails, common.LevelRead),
+		handler.GetEmails,
 	)
 
-	req, _ := http.NewRequest("GET", "/api/v1/messages", nil)
+	req, _ := http.NewRequest("GET", "/api/v1/emails", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 

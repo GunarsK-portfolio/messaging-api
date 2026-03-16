@@ -29,81 +29,78 @@ func (h *Handler) CreateContactMessage(c *gin.Context) {
 		return
 	}
 
-	// Check honeypot for spam
 	if req.IsSpam() {
-		// Silently accept but don't save - don't let bots know they've been detected
 		c.JSON(http.StatusCreated, gin.H{"message": "Thank you for your message"})
 		return
 	}
 
-	message := &models.ContactMessage{
-		Name:    req.Name,
-		Email:   req.Email,
-		Subject: req.Subject,
-		Message: req.Message,
-		Status:  models.MessageStatusPending,
+	email := &models.Email{
+		Type:        models.EmailTypeContactForm,
+		Name:        &req.Name,
+		SenderEmail: &req.Email,
+		Subject:     req.Subject,
+		Message:     req.Message,
+		Status:      models.EmailStatusPending,
 	}
 
-	if err := h.repo.CreateContactMessage(c.Request.Context(), message); err != nil {
+	if err := h.repo.CreateEmail(c.Request.Context(), email); err != nil {
 		commonhandlers.LogAndRespondError(c, http.StatusInternalServerError, err, "Failed to submit message")
 		return
 	}
 
-	// Publish to queue for async processing (email notifications)
-	event := models.ContactMessageEvent{MessageID: message.ID}
+	event := models.EmailEvent{EmailID: email.ID}
 	if err := h.publisher.Publish(c.Request.Context(), event); err != nil {
-		// Log error but don't fail the request - message is saved, notification can be retried
-		logger.GetLogger(c).Error("Failed to publish message to queue", "error", err, "messageId", message.ID)
+		logger.GetLogger(c).Error("Failed to publish message to queue", "error", err, "emailId", email.ID)
 	}
 
 	c.JSON(http.StatusCreated, gin.H{"message": "Thank you for your message"})
 }
 
-// GetContactMessages godoc
-// @Summary Get all contact messages
-// @Description Returns all contact messages (admin only)
-// @Tags Messages
+// GetEmails godoc
+// @Summary Get all emails
+// @Description Returns all emails (admin only)
+// @Tags Emails
 // @Produce json
-// @Success 200 {array} models.ContactMessage
+// @Success 200 {array} models.Email
 // @Failure 401 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Security BearerAuth
-// @Router /messages [get]
-func (h *Handler) GetContactMessages(c *gin.Context) {
-	messages, err := h.repo.GetContactMessages(c.Request.Context())
+// @Router /emails [get]
+func (h *Handler) GetEmails(c *gin.Context) {
+	emails, err := h.repo.GetEmails(c.Request.Context())
 	if err != nil {
-		commonhandlers.LogAndRespondError(c, http.StatusInternalServerError, err, "Failed to retrieve messages")
+		commonhandlers.LogAndRespondError(c, http.StatusInternalServerError, err, "Failed to retrieve emails")
 		return
 	}
 
-	c.JSON(http.StatusOK, messages)
+	c.JSON(http.StatusOK, emails)
 }
 
-// GetContactMessage godoc
-// @Summary Get contact message by ID
-// @Description Returns a single contact message (admin only)
-// @Tags Messages
+// GetEmail godoc
+// @Summary Get email by ID
+// @Description Returns a single email (admin only)
+// @Tags Emails
 // @Produce json
-// @Param id path int true "Message ID"
-// @Success 200 {object} models.ContactMessage
+// @Param id path int true "Email ID"
+// @Success 200 {object} models.Email
 // @Failure 400 {object} map[string]string
 // @Failure 401 {object} map[string]string
 // @Failure 404 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Security BearerAuth
-// @Router /messages/{id} [get]
-func (h *Handler) GetContactMessage(c *gin.Context) {
+// @Router /emails/{id} [get]
+func (h *Handler) GetEmail(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		commonhandlers.RespondError(c, http.StatusBadRequest, "Invalid ID format")
 		return
 	}
 
-	message, err := h.repo.GetContactMessageByID(c.Request.Context(), id)
+	email, err := h.repo.GetEmailByID(c.Request.Context(), id)
 	if err != nil {
-		commonhandlers.HandleRepositoryError(c, err, "Message not found", "Failed to retrieve message")
+		commonhandlers.HandleRepositoryError(c, err, "Email not found", "Failed to retrieve email")
 		return
 	}
 
-	c.JSON(http.StatusOK, message)
+	c.JSON(http.StatusOK, email)
 }
