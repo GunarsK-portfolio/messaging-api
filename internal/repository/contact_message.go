@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/GunarsK-portfolio/portfolio-common/models"
-	"gorm.io/gorm"
+	commonrepo "github.com/GunarsK-portfolio/portfolio-common/repository"
 )
 
 // CreateEmail creates a new email record
@@ -45,29 +45,7 @@ func (r *repository) GetEmailByID(ctx context.Context, id int64) (*models.Email,
 	return &email, nil
 }
 
-// UpdateEmailStatus updates the status of an email
+// UpdateEmailStatus delegates to the shared helper in portfolio-common
 func (r *repository) UpdateEmailStatus(ctx context.Context, id int64, status string, lastError *string) error {
-	updates := map[string]interface{}{
-		"status":     status,
-		"last_error": nil,
-	}
-	if lastError != nil {
-		updates["last_error"] = *lastError
-	}
-	if status == models.EmailStatusSent {
-		updates["sent_at"] = r.db.NowFunc()
-	}
-	if status == models.EmailStatusFailed {
-		updates["attempts"] = gorm.Expr("attempts + 1")
-	}
-
-	result := r.db.WithContext(ctx).
-		Model(&models.Email{}).
-		Where("id = ?", id).
-		Updates(updates)
-
-	if err := checkRowsAffected(result); err != nil {
-		return fmt.Errorf("failed to update email status: %w", err)
-	}
-	return nil
+	return commonrepo.UpdateEmailStatus(r.db, ctx, id, status, lastError)
 }
