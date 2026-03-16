@@ -205,6 +205,7 @@ type routePermission struct {
 var emailsRoutes = []routePermission{
 	{"GET", "/api/v1/emails", common.ResourceEmails, common.LevelRead},
 	{"GET", "/api/v1/emails/1", common.ResourceEmails, common.LevelRead},
+	{"POST", "/api/v1/emails", common.ResourceEmails, common.LevelEdit},
 }
 
 var messagesRoutes = []routePermission{

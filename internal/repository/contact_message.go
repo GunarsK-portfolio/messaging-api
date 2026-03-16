@@ -19,11 +19,15 @@ func (r *repository) CreateEmail(ctx context.Context, email *models.Email) error
 	return nil
 }
 
-// GetEmails retrieves all emails
+// defaultEmailLimit caps the number of emails returned to prevent OOM on large datasets
+const defaultEmailLimit = 100
+
+// GetEmails retrieves recent emails (capped at defaultEmailLimit)
 func (r *repository) GetEmails(ctx context.Context) ([]models.Email, error) {
 	var emails []models.Email
 	err := r.db.WithContext(ctx).
 		Order("created_at DESC").
+		Limit(defaultEmailLimit).
 		Find(&emails).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to get emails: %w", err)
