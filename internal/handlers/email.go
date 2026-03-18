@@ -9,7 +9,7 @@ import (
 	"github.com/GunarsK-portfolio/portfolio-common/logger"
 	"github.com/GunarsK-portfolio/portfolio-common/models"
 
-	"github.com/GunarsK-portfolio/messaging-api/internal/renderer"
+	"github.com/GunarsK-portfolio/portfolio-common/renderer"
 )
 
 // SendEmailRequest is the DTO for the S2S email endpoint
@@ -40,8 +40,8 @@ func (h *Handler) SendEmail(c *gin.Context) {
 		return
 	}
 
-	subject := renderer.SubjectForType(req.Type)
-	if subject == "" {
+	subject, ok := renderer.SubjectForType(req.Type)
+	if !ok {
 		commonhandlers.RespondError(c, http.StatusBadRequest, "unsupported email type: "+req.Type)
 		return
 	}
