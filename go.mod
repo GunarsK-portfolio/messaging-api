@@ -3,7 +3,7 @@ module github.com/GunarsK-portfolio/messaging-api
 go 1.26.1
 
 require (
-	github.com/GunarsK-portfolio/portfolio-common v0.46.0
+	github.com/GunarsK-portfolio/portfolio-common v0.47.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-playground/validator/v10 v10.30.1
 	github.com/prometheus/client_golang v1.23.2
