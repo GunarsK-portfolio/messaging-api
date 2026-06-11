@@ -40,10 +40,11 @@ func main() {
 
 	appLogger.Info("Starting messaging API", "version", "1.0")
 
-	metricsCollector := metrics.New(metrics.Config{
+	metricsCfg := metrics.Config{
 		ServiceName: "messaging",
 		Namespace:   "portfolio",
-	})
+	}
+	metricsCollector := metrics.New(metricsCfg)
 
 	//nolint:staticcheck // Embedded field name required due to ambiguous fields
 	db, err := commondb.Connect(commondb.PostgresConfig{
@@ -66,7 +67,12 @@ func main() {
 	}()
 	appLogger.Info("Database connection established")
 
-	publisher, err := queue.NewRabbitMQPublisher(cfg.RabbitMQConfig)
+	queueMetrics := metrics.NewQueueMetrics(metricsCfg)
+
+	publisher, err := queue.NewRabbitMQPublisher(cfg.RabbitMQConfig,
+		queue.WithPublisherLogger(appLogger),
+		queue.WithPublisherMetrics(queueMetrics),
+	)
 	if err != nil {
 		appLogger.Error("Failed to connect to RabbitMQ", "error", err)
 		os.Exit(1)
@@ -78,10 +84,10 @@ func main() {
 	}()
 	appLogger.Info("RabbitMQ connection established")
 
-	// Health checks
+	// Health checks (provider form stays accurate across reconnects)
 	healthAgg := health.NewAggregator(3 * time.Second)
 	healthAgg.Register(health.NewPostgresChecker(db))
-	healthAgg.Register(health.NewRabbitMQChecker(publisher.Connection()))
+	healthAgg.Register(health.NewRabbitMQCheckerWithProvider(publisher.Connection))
 
 	repo := repository.New(db)
 	handler := handlers.New(repo, publisher)
