@@ -18,7 +18,7 @@ RESTful API for contact form submissions and recipient management.
 
 ## Tech Stack
 
-- **Language**: Go 1.26.4
+- **Language**: Go 1.26.5
 - **Framework**: Gin
 - **Database**: PostgreSQL (GORM)
 - **Message Queue**: RabbitMQ (async email notification processing)
